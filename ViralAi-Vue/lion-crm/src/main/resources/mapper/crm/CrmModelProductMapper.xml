@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmModelProductMapper">
+    
+    <resultMap type="CrmModelProduct" id="CrmModelProductResult">
+        <result property="id"    column="id"    />
+        <result property="name"    column="name"    />
+        <result property="no"    column="no"    />
+        <result property="type"    column="type"    />
+        <result property="source"    column="source"    />
+        <result property="priceDetail"    column="price_detail"    />
+        <result property="status"    column="status"    />
+        <result property="description"    column="description"    />
+        <result property="creator"    column="creator"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updater"    column="updater"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="deleted"    column="deleted"    />
+    </resultMap>
+
+    <sql id="selectCrmModelProductVo">
+        select id, name, no, type, source, price_detail, status, description, creator, create_time, updater, update_time, deleted from crm_model_product
+    </sql>
+
+    <select id="selectCrmModelProductList" parameterType="CrmModelProduct" resultType="com.ruoyi.crm.dto.CrmModelProductDto">
+        select a.id, a.name, a.no, a.type, a.source, a.price_detail, a.status, a.description,
+        e.user_name as creator, a.create_time, c.user_name as updater, a.update_time
+        from crm_model_product a
+            left join sys_user c on a.updater = c.user_id
+            left join sys_user e on a.creator = e.user_id
+        <where>
+            a.deleted = 0
+            <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>
+            <if test="no != null  and no != ''"> and a.no like concat('%', #{no}, '%')</if>
+            <if test="type != null "> and a.type = #{type}</if>
+            <if test="source != null  and source != ''"> and a.source = #{source}</if>
+            <if test="priceDetail != null  and priceDetail != ''"> and a.price_detail like concat('%', #{priceDetail}, '%')</if>
+            <if test="status != null "> and a.status = #{status}</if>
+            <if test="description != null  and description != ''"> and a.description like concat('%', #{description}, '%')</if>
+            <if test="creator != null "> and a.creator = #{creator}</if>
+            <if test="updater != null "> and a.updater = #{updater}</if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.create_time &gt;= str_to_date(concat(#{params.beginTime}, ' 00:00:00'), '%Y-%m-%d %H:%i:%s')
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.create_time &lt;= str_to_date(concat(#{params.endTime}, ' 23:59:59'), '%Y-%m-%d %H:%i:%s')
+            </if>
+        </where>
+        order by a.id desc
+    </select>
+    
+    <select id="selectCrmModelProductById" parameterType="Long" resultMap="CrmModelProductResult">
+        <include refid="selectCrmModelProductVo"/>
+        where id = #{id} and deleted = 0
+    </select>
+
+    <insert id="insertCrmModelProduct" parameterType="CrmModelProduct" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_model_product
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="name != null and name != ''">name,</if>
+            <if test="no != null and no != ''">no,</if>
+            type,
+            <if test="source != null">source,</if>
+            <if test="priceDetail != null">price_detail,</if>
+            <if test="status != null">status,</if>
+            <if test="description != null">description,</if>
+            <if test="creator != null">creator,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updater != null">updater,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="deleted != null">deleted,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="name != null and name != ''">#{name},</if>
+            <if test="no != null and no != ''">#{no},</if>
+            #{type},
+            <if test="source != null">#{source},</if>
+            <if test="priceDetail != null">#{priceDetail},</if>
+            <if test="status != null">#{status},</if>
+            <if test="description != null">#{description},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updater != null">#{updater},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="deleted != null">#{deleted},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCrmModelProduct" parameterType="CrmModelProduct">
+        update crm_model_product
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="no != null and no != ''">no = #{no},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="source != null">source = #{source},</if>
+            <if test="priceDetail != null">price_detail = #{priceDetail},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="deleted != null">deleted = #{deleted},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteCrmModelProductById" parameterType="Long">
+        update crm_model_product set deleted = 1 where id = #{id}
+    </delete>
+
+    <delete id="deleteCrmModelProductByIds" parameterType="String">
+        update crm_model_product set deleted = 1 where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmSupplierProjectMapper">
+    
+    <resultMap type="CrmSupplierProject" id="CrmSupplierProjectResult">
+        <result property="id"    column="id"    />
+        <result property="supplierId"    column="supplier_id"    />
+        <result property="projectId"    column="project_id"    />
+        <result property="minCostDiscount"    column="min_cost_discount"    />
+        <result property="maxCostDiscount"    column="max_cost_discount"    />
+        <result property="minSellDiscount"    column="min_sell_discount"    />
+        <result property="maxSellDiscount"    column="max_sell_discount"    />
+        <result property="minAgentDiscount"    column="min_agent_discount"    />
+        <result property="maxAgentDiscount"    column="max_agent_discount"    />
+        <result property="dailyUsageAmount"    column="daily_usage_amount"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="creator"    column="creator"    />
+        <result property="updater"    column="updater"    />
+    </resultMap>
+
+    <sql id="selectCrmSupplierProjectVo">
+        select id, supplier_id, project_id, min_cost_discount, max_cost_discount, min_sell_discount, max_sell_discount, min_agent_discount, max_agent_discount, daily_usage_amount, create_time, update_time, creator, updater from crm_supplier_project
+    </sql>
+
+    <select id="selectCrmSupplierProjectList" parameterType="CrmSupplierProject" resultMap="CrmSupplierProjectResult">
+        <include refid="selectCrmSupplierProjectVo"/>
+        <where>  
+            <if test="supplierId != null "> and supplier_id = #{supplierId}</if>
+            <if test="projectId != null "> and project_id = #{projectId}</if>
+            <if test="minCostDiscount != null "> and min_cost_discount = #{minCostDiscount}</if>
+            <if test="maxCostDiscount != null "> and max_cost_discount = #{maxCostDiscount}</if>
+            <if test="minSellDiscount != null "> and min_sell_discount = #{minSellDiscount}</if>
+            <if test="maxSellDiscount != null "> and max_sell_discount = #{maxSellDiscount}</if>
+            <if test="minAgentDiscount != null "> and min_agent_discount = #{minAgentDiscount}</if>
+            <if test="maxAgentDiscount != null "> and max_agent_discount = #{maxAgentDiscount}</if>
+            <if test="dailyUsageAmount != null "> and daily_usage_amount = #{dailyUsageAmount}</if>
+            <if test="creator != null "> and creator = #{creator}</if>
+            <if test="updater != null "> and updater = #{updater}</if>
+        </where>
+    </select>
+    
+    <select id="selectCrmSupplierProjectById" parameterType="Long" resultMap="CrmSupplierProjectResult">
+        <include refid="selectCrmSupplierProjectVo"/>
+        where id = #{id}
+    </select>
+
+    <insert id="insertCrmSupplierProject" parameterType="CrmSupplierProject" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_supplier_project
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="id != null">id,</if>
+            <if test="supplierId != null">supplier_id,</if>
+            <if test="projectId != null">project_id,</if>
+            <if test="minCostDiscount != null">min_cost_discount,</if>
+            <if test="maxCostDiscount != null">max_cost_discount,</if>
+            <if test="minSellDiscount != null">min_sell_discount,</if>
+            <if test="maxSellDiscount != null">max_sell_discount,</if>
+            <if test="minAgentDiscount != null">min_agent_discount,</if>
+            <if test="maxAgentDiscount != null">max_agent_discount,</if>
+            <if test="dailyUsageAmount != null">daily_usage_amount,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="creator != null">creator,</if>
+            <if test="updater != null">updater,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="id != null">#{id},</if>
+            <if test="supplierId != null">#{supplierId},</if>
+            <if test="projectId != null">#{projectId},</if>
+            <if test="minCostDiscount != null">#{minCostDiscount},</if>
+            <if test="maxCostDiscount != null">#{maxCostDiscount},</if>
+            <if test="minSellDiscount != null">#{minSellDiscount},</if>
+            <if test="maxSellDiscount != null">#{maxSellDiscount},</if>
+            <if test="minAgentDiscount != null">#{minAgentDiscount},</if>
+            <if test="maxAgentDiscount != null">#{maxAgentDiscount},</if>
+            <if test="dailyUsageAmount != null">#{dailyUsageAmount},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="updater != null">#{updater},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCrmSupplierProject" parameterType="CrmSupplierProject">
+        update crm_supplier_project
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="supplierId != null">supplier_id = #{supplierId},</if>
+            <if test="projectId != null">project_id = #{projectId},</if>
+            <if test="minCostDiscount != null">min_cost_discount = #{minCostDiscount},</if>
+            <if test="maxCostDiscount != null">max_cost_discount = #{maxCostDiscount},</if>
+            <if test="minSellDiscount != null">min_sell_discount = #{minSellDiscount},</if>
+            <if test="maxSellDiscount != null">max_sell_discount = #{maxSellDiscount},</if>
+            <if test="minAgentDiscount != null">min_agent_discount = #{minAgentDiscount},</if>
+            <if test="maxAgentDiscount != null">max_agent_discount = #{maxAgentDiscount},</if>
+            <if test="dailyUsageAmount != null">daily_usage_amount = #{dailyUsageAmount},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="creator != null">creator = #{creator},</if>
+            <if test="updater != null">updater = #{updater},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteCrmSupplierProjectById" parameterType="Long">
+        delete from crm_supplier_project where id = #{id}
+    </delete>
+
+    <delete id="deleteCrmSupplierProjectByIds" parameterType="String">
+        delete from crm_supplier_project where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <delete id="deleteCrmSupplierProjectBySupplierId" parameterType="Long">
+        delete from crm_supplier_project where supplier_id = #{supplierId}
+    </delete>
+
+    <select id="selectSupplierProjectListBySupplierId" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmSupplierProjectDto">
+        select sp.project_id         as projectId,
+               p.no                  as projectNo,
+               p.name                as projectName,
+               sp.min_cost_discount  as minCostDiscount,
+               sp.max_cost_discount  as maxCostDiscount,
+               sp.min_sell_discount  as minSellDiscount,
+               sp.max_sell_discount  as maxSellDiscount,
+               sp.min_agent_discount as minAgentDiscount,
+               sp.max_agent_discount as maxAgentDiscount,
+               sp.daily_usage_amount as dailyUsageAmount
+        from crm_supplier_project sp
+            left join crm_model_product p on p.id = sp.project_id
+        where sp.supplier_id = #{supplierId}
+        order by sp.id
+    </select>
+</mapper>

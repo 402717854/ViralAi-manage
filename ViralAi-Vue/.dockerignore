@@ -1,0 +1,24 @@
+# 构建上下文瘦身：只保留编译真正需要的文件
+**/target/
+.git/
+.gitignore
+.idea/
+.workbuddy/
+.vscode/
+*.iml
+doc/
+sql/
+.github/
+
+# Docker 自身文件无需进入上下文
+Dockerfile
+.dockerignore
+docker-compose*.yml
+.env
+.env.*
+
+# 本地启动脚本与日志
+ry.sh
+ry.bat
+**/*.log
+logs/

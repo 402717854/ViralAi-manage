@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmSupplierMapper">
+    
+    <resultMap type="CrmSupplier" id="CrmSupplierResult">
+        <result property="id"    column="id"    />
+        <result property="name"    column="name"    />
+        <result property="ownerUser"    column="owner_user"    />
+        <result property="status"    column="status"    />
+        <result property="mobile"    column="mobile"    />
+        <result property="email"    column="email"    />
+        <result property="detailAddress"    column="detail_address"    />
+        <result property="payType"    column="pay_type"    />
+        <result property="remark"    column="remark"    />
+        <result property="creator"    column="creator"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updater"    column="updater"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="deleted"    column="deleted"    />
+    </resultMap>
+
+    <sql id="selectCrmSupplierVo">
+        select id, name, owner_user, status, mobile, email, detail_address, pay_type, remark, creator, create_time, updater, update_time, deleted from crm_supplier
+    </sql>
+
+    <select id="selectCrmSupplierList" parameterType="CrmSupplier" resultType="com.ruoyi.crm.dto.CrmSupplierDto">
+        select a.id, a.name, a.owner_user, a.status, a.mobile, a.email, a.detail_address, a.pay_type,
+        a.remark,
+        e.user_name as creator,
+        a.create_time, c.user_name as updater, a.update_time, a.deleted from crm_supplier a
+        left join sys_user c on a.updater=c.user_id
+        left join sys_user e on a.creator=e.user_id
+        <where>
+            a.deleted = 0
+            <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>
+            <if test="ownerUser != null  and ownerUser != ''"> and a.owner_user = #{ownerUser}</if>
+            <if test="status != null "> and a.status = #{status}</if>
+            <if test="mobile != null  and mobile != ''"> and a.mobile = #{mobile}</if>
+            <if test="email != null  and email != ''"> and a.email = #{email}</if>
+            <if test="detailAddress != null  and detailAddress != ''"> and a.detail_address = #{detailAddress}</if>
+            <if test="payType != null "> and a.pay_type = #{payType}</if>
+            <if test="creator != null "> and a.creator = #{creator}</if>
+            <if test="updater != null "> and a.updater = #{updater}</if>
+        </where>
+    </select>
+    
+    <select id="selectCrmSupplierById" parameterType="Long" resultMap="CrmSupplierResult">
+        <include refid="selectCrmSupplierVo"/>
+        where id = #{id}
+    </select>
+
+    <insert id="insertCrmSupplier" parameterType="CrmSupplier" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_supplier
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="name != null">name,</if>
+            <if test="ownerUser != null">owner_user,</if>
+            <if test="status != null">status,</if>
+            <if test="mobile != null">mobile,</if>
+            <if test="email != null">email,</if>
+            <if test="detailAddress != null">detail_address,</if>
+            <if test="payType != null">pay_type,</if>
+            <if test="remark != null">remark,</if>
+            <if test="creator != null">creator,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updater != null">updater,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="deleted != null">deleted,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="name != null">#{name},</if>
+            <if test="ownerUser != null">#{ownerUser},</if>
+            <if test="status != null">#{status},</if>
+            <if test="mobile != null">#{mobile},</if>
+            <if test="email != null">#{email},</if>
+            <if test="detailAddress != null">#{detailAddress},</if>
+            <if test="payType != null">#{payType},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updater != null">#{updater},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="deleted != null">#{deleted},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCrmSupplier" parameterType="CrmSupplier">
+        update crm_supplier
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name != null">name = #{name},</if>
+            <if test="ownerUser != null">owner_user = #{ownerUser},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="mobile != null">mobile = #{mobile},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="detailAddress != null">detail_address = #{detailAddress},</if>
+            <if test="payType != null">pay_type = #{payType},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="creator != null">creator = #{creator},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="deleted != null">deleted = #{deleted},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteCrmSupplierById" parameterType="Long">
+        update crm_supplier set deleted = 1 where id = #{id}
+    </delete>
+
+    <delete id="deleteCrmSupplierByIds" parameterType="String">
+        update crm_supplier set deleted = 1 where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="selectAvailableSupplierOptions" resultType="com.ruoyi.crm.dto.CrmSupplierOptionDto">
+        select id,name from crm_supplier where deleted=0 and status=1
+    </select>
+</mapper>

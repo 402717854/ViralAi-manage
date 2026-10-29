@@ -1,0 +1,122 @@
+name: ruoyi-prod
+
+# -----------------------------------------------------------------------------
+# RuoYi-Vue 生产部署：仅 后端(ruoyi-admin) + 前端(Nginx)
+#
+# 与 docker-compose.yml 的区别：
+#   * 不再启动 mysql / redis 容器，数据库与缓存连接**外部已存在的服务**
+#   * 不挂载 SQL 初始化脚本（表结构与数据由 DBA / 运维在远程实例上维护）
+#   * 上传目录、日志使用命名卷，便于备份与迁移
+#   * 未固定 container_name，容器由 compose 自动命名（ruoyi-prod-server-1），
+#     可与开发栈 docker-compose.yml 在同一台机器共存
+#
+# 使用方式：
+#   cp .env.prod.example .env.prod && vi .env.prod     # 填远程 DB/Redis 地址与密码
+#   docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --build
+#   docker compose -f docker-compose-prod.yml --env-file .env.prod logs -f server
+#   docker compose -f docker-compose-prod.yml --env-file .env.prod down
+#
+# 已在 CI 中构建并推送镜像时，可跳过构建：
+#   SERVER_IMAGE=registry.example.com/ruoyi/server:1.0.0 \
+#   WEB_IMAGE=registry.example.com/ruoyi/web:1.0.0 \
+#   docker compose -f docker-compose-prod.yml --env-file .env.prod up -d --no-build
+# -----------------------------------------------------------------------------
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 国内网络可设为 https://maven.aliyun.com/repository/public
+        MAVEN_MIRROR: ${MAVEN_MIRROR:-}
+    image: ${SERVER_IMAGE:-ruoyi-server:${TAG:-latest}}
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      JAVA_OPTS: ${JAVA_OPTS:--Xms1024m -Xmx2048m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/home/ruoyi/logs -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8}
+      # 上传文件目录（与下面的 ruoyi-upload 卷对应）
+      RUOYI_PROFILE: /home/ruoyi/uploadPath
+      # ---------------- 远程 MySQL ----------------
+      # DB_HOST 为远程实例地址：域名、公网 IP、内网 IP 均可；
+      # 若 MySQL 就跑在 docker 宿主机上（非容器），可用 host.docker.internal（已配 extra_hosts）。
+      DB_URL: "jdbc:mysql://${DB_HOST:-host.docker.internal}:${DB_PORT:-3306}/${DB_NAME:-ry}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=${DB_USE_SSL:-false}&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&connectTimeout=10000&socketTimeout=60000"
+      DB_USERNAME: ${DB_USERNAME:-ruoyi}
+      DB_PASSWORD: ${DB_PASSWORD:?请设置 DB_PASSWORD（远程数据库密码）}
+      # ---------------- 远程 Redis ----------------
+      REDIS_HOST: ${REDIS_HOST:-host.docker.internal}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?请设置 REDIS_PASSWORD（远程 Redis 密码）}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
+      # ---------------- 其他 ----------------
+      # 令牌密钥：上线前务必改成随机长串（openssl rand -base64 48）
+      TOKEN_SECRET: ${TOKEN_SECRET:?请设置 TOKEN_SECRET（JWT 密钥）}
+      DRUID_USERNAME: ${DRUID_USERNAME:-ruoyi}
+      DRUID_PASSWORD: ${DRUID_PASSWORD:-ruoyi@druid}
+    # 让容器能解析 host.docker.internal（Linux 下默认不提供），
+    # 便于 Redis/MySQL 部署在宿主机而非容器内的场景。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # 生产建议改绑宿主机目录做持久化，注意目录属主需为 1000:1000：
+      #   mkdir -p /data/ruoyi/upload /data/ruoyi/logs && chown -R 1000:1000 /data/ruoyi
+      #   - /data/ruoyi/upload:/home/ruoyi/uploadPath
+      #   - /data/ruoyi/logs:/home/ruoyi/logs
+      - ruoyi-upload:/home/ruoyi/uploadPath
+      - ruoyi-logs:/home/ruoyi/logs
+    ports:
+      # 仅内网暴露时绑定到具体网卡，如 "127.0.0.1:8080:8080" 或 "10.0.0.5:8080:8080"
+      - "${SERVER_PORT:-8080}:8080"
+    networks:
+      - ruoyi-net
+    stop_grace_period: 30s
+    # 外部依赖不可用时快速暴露问题；start_period 给足远程 DB 首次建连与应用启动时间
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/captchaImage > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    # 需要限制资源时打开（Compose v2 支持）
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: "2"
+    #       memory: 2g
+
+  web:
+    build:
+      context: ${FRONTEND_DIR:-../RuoYi-Vue3}
+      dockerfile: Dockerfile
+      args:
+        # 国内网络可设为 https://registry.npmmirror.com
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    image: ${WEB_IMAGE:-ruoyi-web:${TAG:-latest}}
+    restart: always
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "${WEB_PORT:-80}:80"
+    networks:
+      - ruoyi-net
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+volumes:
+  ruoyi-upload:
+  ruoyi-logs:
+
+networks:
+  ruoyi-net:
+    driver: bridge

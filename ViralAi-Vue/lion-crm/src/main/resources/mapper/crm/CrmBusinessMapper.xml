@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmBusinessMapper">
+    
+    <resultMap type="CrmBusiness" id="CrmBusinessResult">
+        <result property="id"    column="id"    />
+        <result property="name"    column="name"    />
+        <result property="customerId"    column="customer_id"    />
+        <result property="supplierId"    column="supplier_id"    />
+        <result property="ownerUser"    column="owner_user"    />
+        <result property="busStatus"    column="bus_status"    />
+        <result property="dealTime"    column="deal_time"    />
+        <result property="contactStatus"    column="contact_status"    />
+        <result property="settleStatus"    column="settle_status"    />
+        <result property="contactAmount"    column="contact_amount"    />
+        <result property="creditAmount"    column="credit_amount"    />
+        <result property="remark"    column="remark"    />
+        <result property="failRemark"    column="fail_remark"    />
+        <result property="creator"    column="creator"    />
+        <result property="updater"    column="updater"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="deleted"    column="deleted"    />
+    </resultMap>
+
+    <sql id="selectCrmBusinessVo">
+        select id, name, customer_id, supplier_id, owner_user, bus_status, deal_time, contact_status, settle_status, contact_amount, credit_amount, remark, fail_remark, creator, updater, create_time, update_time, deleted from crm_business
+    </sql>
+
+    <select id="selectCrmBusinessList" parameterType="CrmBusiness" resultType="com.ruoyi.crm.dto.CrmBusinessDto">
+        select a.id, a.name, b.name as customer, d.name as supplier, a.owner_user, a.bus_status, a.deal_time,
+               a.contact_status, a.settle_status,a.contact_amount, a.credit_amount, a.remark, a.fail_remark,
+               e.user_name as creator, c.user_name as updater, a.create_time, a.update_time, a.deleted
+               from crm_business a
+               left join crm_customer b on a.customer_id=b.id
+               left join sys_user c on a.updater=c.user_id
+               left join crm_supplier d on a.supplier_id=d.id
+               left join sys_user e on a.creator=e.user_id
+        <where>
+            a.deleted =0
+            <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>
+            <if test="customerId != null "> and a.customer_id = #{customerId}</if>
+            <if test="supplierId != null "> and a.supplier_id = #{supplierId}</if>
+            <if test="ownerUser != null  and ownerUser != ''"> and a.owner_user = #{ownerUser}</if>
+            <if test="busStatus != null "> and a.bus_status = #{busStatus}</if>
+            <if test="dealTime != null "> and a.deal_time = #{dealTime}</if>
+            <if test="contactStatus != null "> and a.contact_status = #{contactStatus}</if>
+            <if test="settleStatus != null "> and a.settle_status = #{settleStatus}</if>
+            <if test="contactAmount != null "> and a.contact_amount = #{contactAmount}</if>
+            <if test="creditAmount != null "> and a.credit_amount = #{creditAmount}</if>
+            <if test="failRemark != null  and failRemark != ''"> and a.fail_remark = #{failRemark}</if>
+            <if test="creator != null "> and a.creator = #{creator}</if>
+            <if test="updater != null "> and a.updater = #{updater}</if>
+        </where>
+    </select>
+    
+    <select id="selectCrmBusinessById" parameterType="Long" resultMap="CrmBusinessResult">
+        <include refid="selectCrmBusinessVo"/>
+        where id = #{id}
+    </select>
+
+    <insert id="insertCrmBusiness" parameterType="CrmBusiness" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_business
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="name != null and name != ''">name,</if>
+            <if test="customerId != null">customer_id,</if>
+            <if test="supplierId != null">supplier_id,</if>
+            <if test="ownerUser != null">owner_user,</if>
+            <if test="busStatus != null">bus_status,</if>
+            <if test="dealTime != null">deal_time,</if>
+            <if test="contactStatus != null">contact_status,</if>
+            <if test="settleStatus != null">settle_status,</if>
+            <if test="contactAmount != null">contact_amount,</if>
+            <if test="creditAmount != null">credit_amount,</if>
+            <if test="remark != null">remark,</if>
+            <if test="failRemark != null">fail_remark,</if>
+            <if test="creator != null">creator,</if>
+            <if test="updater != null">updater,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="deleted != null">deleted,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="name != null and name != ''">#{name},</if>
+            <if test="customerId != null">#{customerId},</if>
+            <if test="supplierId != null">#{supplierId},</if>
+            <if test="ownerUser != null">#{ownerUser},</if>
+            <if test="busStatus != null">#{busStatus},</if>
+            <if test="dealTime != null">#{dealTime},</if>
+            <if test="contactStatus != null">#{contactStatus},</if>
+            <if test="settleStatus != null">#{settleStatus},</if>
+            <if test="contactAmount != null">#{contactAmount},</if>
+            <if test="creditAmount != null">#{creditAmount},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="failRemark != null">#{failRemark},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="updater != null">#{updater},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="deleted != null">#{deleted},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCrmBusiness" parameterType="CrmBusiness">
+        update crm_business
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="customerId != null">customer_id = #{customerId},</if>
+            <if test="supplierId != null">supplier_id = #{supplierId},</if>
+            <if test="ownerUser != null">owner_user = #{ownerUser},</if>
+            <if test="busStatus != null">bus_status = #{busStatus},</if>
+            <if test="dealTime != null">deal_time = #{dealTime},</if>
+            <if test="contactStatus != null">contact_status = #{contactStatus},</if>
+            <if test="settleStatus != null">settle_status = #{settleStatus},</if>
+            <if test="contactAmount != null">contact_amount = #{contactAmount},</if>
+            <if test="creditAmount != null">credit_amount = #{creditAmount},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="failRemark != null">fail_remark = #{failRemark},</if>
+            <if test="creator != null">creator = #{creator},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="deleted != null">deleted = #{deleted},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <update id="updateBusStatus">
+        update crm_business
+        set bus_status = #{busStatus},
+            fail_remark = #{failRemark,jdbcType=VARCHAR},
+            <if test="creditAmount != null">credit_amount = #{creditAmount},</if>
+            <if test="dealTime != null">deal_time = #{dealTime},</if>
+            updater = #{updater},
+            update_time = sysdate()
+        where id = #{id}
+          and bus_status = #{oldStatus}
+          and deleted = 0
+    </update>
+
+    <delete id="deleteCrmBusinessById" parameterType="Long">
+        update crm_business set deleted = 1 where id = #{id}
+    </delete>
+
+    <delete id="deleteCrmBusinessByIds" parameterType="String">
+        update crm_business set deleted = 1 where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

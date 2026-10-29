@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmCustomerMapper">
+    
+    <resultMap type="CrmCustomer" id="CrmCustomerResult">
+        <result property="id"    column="id"    />
+        <result property="name"    column="name"    />
+        <result property="followUpStatus"    column="follow_up_status"    />
+        <result property="contactLastTime"    column="contact_last_time"    />
+        <result property="contactLastContent"    column="contact_last_content"    />
+        <result property="contactNextTime"    column="contact_next_time"    />
+        <result property="ownerUser"    column="owner_user"    />
+        <result property="ownerTime"    column="owner_time"    />
+        <result property="lockStatus"    column="lock_status"    />
+        <result property="status"    column="status"    />
+        <result property="mobile"    column="mobile"    />
+        <result property="telephone"    column="telephone"    />
+        <result property="qq"    column="qq"    />
+        <result property="wechat"    column="wechat"    />
+        <result property="email"    column="email"    />
+        <result property="areaId"    column="area_id"    />
+        <result property="detailAddress"    column="detail_address"    />
+        <result property="industryId"    column="industry_id"    />
+        <result property="industry"    column="industry"    />
+        <result property="level"    column="level"    />
+        <result property="source"    column="source"    />
+        <result property="remark"    column="remark"    />
+        <result property="creator"    column="creator"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updater"    column="updater"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="deleted"    column="deleted"    />
+        <result property="tenantId"    column="tenant_id"    />
+    </resultMap>
+
+    <sql id="selectCrmCustomerVo">
+        select id, name, follow_up_status, contact_last_time, contact_last_content, contact_next_time, owner_user, owner_time, lock_status, status, mobile, telephone, qq, wechat, email, area_id, detail_address, industry_id,industry, level, source, remark, creator, create_time, updater, update_time, deleted, tenant_id from crm_customer
+    </sql>
+
+    <select id="selectCrmCustomerList" parameterType="CrmCustomer" resultType="com.ruoyi.crm.dto.CrmCustomerDto">
+        select a.id, a.name, a.follow_up_status, a.contact_last_time, a.contact_last_content, a.contact_next_time,
+        a.owner_user, a.owner_time, a.lock_status, a.status, a.mobile, a.telephone, a.qq, a.wechat, a.email,
+        a.area_id, a.detail_address, a.industry_id, a.level, a.source, a.remark, a.create_time,
+        a.update_time, a.deleted, a.tenant_id,e.user_name as creator,c.user_name as updater,a.industry
+        from crm_customer a
+            left join sys_user b on a.owner_user=b.user_id
+            left join sys_user c on a.updater=c.user_id
+            left join sys_user e on a.creator=e.user_id
+        <where>
+            a.deleted =0
+            <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>
+            <if test="followUpStatus != null "> and a.follow_up_status = #{followUpStatus}</if>
+            <if test="contactLastTime != null "> and a.contact_last_time = #{contactLastTime}</if>
+            <if test="contactLastContent != null  and contactLastContent != ''"> and a.contact_last_content = #{contactLastContent}</if>
+            <if test="contactNextTime != null "> and a.contact_next_time = #{contactNextTime}</if>
+            <if test="ownerUser != null "> and a.owner_user = #{ownerUser}</if>
+            <if test="ownerTime != null "> and a.owner_time = #{ownerTime}</if>
+            <if test="lockStatus != null "> and a.lock_status = #{lockStatus}</if>
+            <if test="status != null "> and a.status = #{status}</if>
+            <if test="mobile != null  and mobile != ''"> and a.mobile = #{mobile}</if>
+            <if test="telephone != null  and telephone != ''"> and a.telephone = #{telephone}</if>
+            <if test="qq != null  and qq != ''"> and a.qq = #{qq}</if>
+            <if test="wechat != null  and wechat != ''"> and a.wechat = #{wechat}</if>
+            <if test="email != null  and email != ''"> and a.email = #{email}</if>
+            <if test="areaId != null "> and a.area_id = #{areaId}</if>
+            <if test="detailAddress != null  and detailAddress != ''"> and a.detail_address = #{detailAddress}</if>
+            <if test="industryId != null "> and a.industry_id = #{industryId}</if>
+            <if test="level != null "> and a.level = #{level}</if>
+            <if test="source != null "> and a.source = #{source}</if>
+            <if test="creator != null  and creator != ''"> and a.creator = #{creator}</if>
+            <if test="updater != null  and updater != ''"> and a.updater = #{updater}</if>
+            <if test="tenantId != null "> and a.tenant_id = #{tenantId}</if>
+        </where>
+    </select>
+    
+    <select id="selectCrmCustomerById" parameterType="Long" resultMap="CrmCustomerResult">
+        <include refid="selectCrmCustomerVo"/>
+        where id = #{id}
+    </select>
+
+    <!-- 查询可用客户选项：仅未删除（deleted=0）且状态为正常（status=1）的客户 -->
+    <select id="selectAvailableCustomerOptions" resultType="com.ruoyi.crm.dto.CrmCustomerOptionDto">
+        select id, name from crm_customer where status = 1 and deleted = 0 order by id
+    </select>
+
+    <insert id="insertCrmCustomer" parameterType="CrmCustomer" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_customer
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="name != null">name,</if>
+            <if test="followUpStatus != null">follow_up_status,</if>
+            <if test="contactLastTime != null">contact_last_time,</if>
+            <if test="contactLastContent != null">contact_last_content,</if>
+            <if test="contactNextTime != null">contact_next_time,</if>
+            <if test="ownerUser != null">owner_user,</if>
+            <if test="ownerTime != null">owner_time,</if>
+            <if test="lockStatus != null">lock_status,</if>
+            <if test="status != null">status,</if>
+            <if test="mobile != null">mobile,</if>
+            <if test="telephone != null">telephone,</if>
+            <if test="qq != null">qq,</if>
+            <if test="wechat != null">wechat,</if>
+            <if test="email != null">email,</if>
+            <if test="areaId != null">area_id,</if>
+            <if test="detailAddress != null">detail_address,</if>
+            <if test="industryId != null">industry_id,</if>
+            <if test="industry != null">industry,</if>
+            <if test="level != null">level,</if>
+            <if test="source != null">source,</if>
+            <if test="remark != null">remark,</if>
+            <if test="creator != null">creator,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updater != null">updater,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="deleted != null">deleted,</if>
+            <if test="tenantId != null">tenant_id,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="name != null">#{name},</if>
+            <if test="followUpStatus != null">#{followUpStatus},</if>
+            <if test="contactLastTime != null">#{contactLastTime},</if>
+            <if test="contactLastContent != null">#{contactLastContent},</if>
+            <if test="contactNextTime != null">#{contactNextTime},</if>
+            <if test="ownerUser != null">#{ownerUser},</if>
+            <if test="ownerTime != null">#{ownerTime},</if>
+            <if test="lockStatus != null">#{lockStatus},</if>
+            <if test="status != null">#{status},</if>
+            <if test="mobile != null">#{mobile},</if>
+            <if test="telephone != null">#{telephone},</if>
+            <if test="qq != null">#{qq},</if>
+            <if test="wechat != null">#{wechat},</if>
+            <if test="email != null">#{email},</if>
+            <if test="areaId != null">#{areaId},</if>
+            <if test="detailAddress != null">#{detailAddress},</if>
+            <if test="industryId != null">#{industryId},</if>
+            <if test="industry != null">#{industry},</if>
+            <if test="level != null">#{level},</if>
+            <if test="source != null">#{source},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updater != null">#{updater},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="deleted != null">#{deleted},</if>
+            <if test="tenantId != null">#{tenantId},</if>
+         </trim>
+    </insert>
+
+    <update id="updateCrmCustomer" parameterType="CrmCustomer">
+        update crm_customer
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="name != null">name = #{name},</if>
+            <if test="followUpStatus != null">follow_up_status = #{followUpStatus},</if>
+            <if test="contactLastTime != null">contact_last_time = #{contactLastTime},</if>
+            <if test="contactLastContent != null">contact_last_content = #{contactLastContent},</if>
+            <if test="contactNextTime != null">contact_next_time = #{contactNextTime},</if>
+            <if test="ownerUser != null">owner_user = #{ownerUser},</if>
+            <if test="ownerTime != null">owner_time = #{ownerTime},</if>
+            <if test="lockStatus != null">lock_status = #{lockStatus},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="mobile != null">mobile = #{mobile},</if>
+            <if test="telephone != null">telephone = #{telephone},</if>
+            <if test="qq != null">qq = #{qq},</if>
+            <if test="wechat != null">wechat = #{wechat},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="areaId != null">area_id = #{areaId},</if>
+            <if test="detailAddress != null">detail_address = #{detailAddress},</if>
+            <if test="industryId != null">industry_id = #{industryId},</if>
+            <if test="industry != null">industry = #{industry},</if>
+            <if test="level != null">level = #{level},</if>
+            <if test="source != null">source = #{source},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="creator != null">creator = #{creator},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="deleted != null">deleted = #{deleted},</if>
+            <if test="tenantId != null">tenant_id = #{tenantId},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteCrmCustomerById" parameterType="Long">
+        update crm_customer set deleted = 1 where id = #{id}
+    </delete>
+
+    <delete id="deleteCrmCustomerByIds" parameterType="String">
+        update crm_customer set deleted = 1 where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

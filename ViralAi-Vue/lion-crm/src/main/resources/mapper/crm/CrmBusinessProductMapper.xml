@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmBusinessProductMapper">
+    
+    <resultMap type="CrmBusinessProduct" id="CrmBusinessProductResult">
+        <result property="busId"    column="bus_id"    />
+        <result property="supplierId"    column="supplier_id"    />
+        <result property="productId"    column="product_id"    />
+        <result property="costDiscount"    column="cost_discount"    />
+        <result property="sellDiscount"    column="sell_discount"    />
+        <result property="priceDetail"    column="price_detail"    />
+        <result property="creator"    column="creator"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updator"    column="updator"    />
+        <result property="updateTime"    column="update_time"    />
+    </resultMap>
+
+    <sql id="selectCrmBusinessProductVo">
+        select bus_id, supplier_id, product_id, cost_discount, sell_discount, price_detail, creator, create_time, updator, update_time from crm_business_product
+    </sql>
+
+    <select id="selectCrmBusinessProductList" parameterType="CrmBusinessProduct" resultMap="CrmBusinessProductResult">
+        <include refid="selectCrmBusinessProductVo"/>
+        <where>  
+            <if test="busId != null "> and bus_id = #{busId}</if>
+            <if test="supplierId != null "> and supplier_id = #{supplierId}</if>
+            <if test="productId != null "> and product_id = #{productId}</if>
+            <if test="costDiscount != null "> and cost_discount = #{costDiscount}</if>
+            <if test="sellDiscount != null "> and sell_discount = #{sellDiscount}</if>
+            <if test="priceDetail != null  and priceDetail != ''"> and price_detail = #{priceDetail}</if>
+            <if test="creator != null "> and creator = #{creator}</if>
+            <if test="updator != null "> and updator = #{updator}</if>
+        </where>
+        order by bus_id,supplier_id,product_id
+    </select>
+    
+    <select id="selectOne" resultMap="CrmBusinessProductResult">
+        <include refid="selectCrmBusinessProductVo"/>
+        where bus_id = #{busId} and supplier_id=#{supplierId} and product_id=#{productId}
+    </select>
+
+    <insert id="insertCrmBusinessProduct" parameterType="CrmBusinessProduct">
+        insert into crm_business_product
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="busId != null">bus_id,</if>
+            <if test="supplierId != null">supplier_id,</if>
+            <if test="productId != null">product_id,</if>
+            <if test="costDiscount != null">cost_discount,</if>
+            <if test="sellDiscount != null">sell_discount,</if>
+            <if test="priceDetail != null">price_detail,</if>
+            <if test="creator != null">creator,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updator != null">updator,</if>
+            <if test="updateTime != null">update_time,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="busId != null">#{busId},</if>
+            <if test="supplierId != null">#{supplierId},</if>
+            <if test="productId != null">#{productId},</if>
+            <if test="costDiscount != null">#{costDiscount},</if>
+            <if test="sellDiscount != null">#{sellDiscount},</if>
+            <if test="priceDetail != null">#{priceDetail},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updator != null">#{updator},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+         </trim>
+    </insert>
+
+    <select id="update" parameterType="CrmBusinessProduct">
+        update crm_business_product
+        <set>
+            <if test="costDiscount != null">cost_discount=#{costDiscount},</if>
+            <if test="sellDiscount != null">sell_discount=#{sellDiscount},</if>
+            <if test="updator != null">updator=#{updator},</if>
+            <if test="updateTime != null">update_time=#{updateTime},</if>
+        </set>
+        where bus_id = #{busId} and supplier_id=#{supplierId} and product_id=#{productId}
+    </select>
+</mapper>

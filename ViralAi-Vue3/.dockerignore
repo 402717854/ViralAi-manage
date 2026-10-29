@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.git/
+.gitignore
+.idea/
+.vscode/
+.workbuddy/
+**/*.log
+npm-debug.log*
+Dockerfile
+.dockerignore
