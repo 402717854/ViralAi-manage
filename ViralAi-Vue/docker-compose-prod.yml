@@ -1,4 +1,4 @@
-name: ruoyi-prod
+name: viralai-manage
 
 # -----------------------------------------------------------------------------
 # RuoYi-Vue 生产部署：仅 后端(ruoyi-admin) + 前端(Nginx)
