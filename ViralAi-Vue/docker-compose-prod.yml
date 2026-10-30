@@ -36,7 +36,7 @@ services:
       TZ: Asia/Shanghai
       JAVA_OPTS: ${JAVA_OPTS:--Xms1024m -Xmx2048m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/home/ruoyi/logs -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8}
       # 上传文件目录（与下面的 ruoyi-upload 卷对应）
-      RUOYI_PROFILE: /home/ruoyi/uploadPath
+      VIRALAI_PROFILE: /home/viralai/uploadPath
       # ---------------- 远程 MySQL ----------------
       # DB_HOST 为远程实例地址：域名、公网 IP、内网 IP 均可；
       # 若 MySQL 就跑在 docker 宿主机上（非容器），可用 host.docker.internal（已配 extra_hosts）。
@@ -62,13 +62,13 @@ services:
       #   mkdir -p /data/ruoyi/upload /data/ruoyi/logs && chown -R 1000:1000 /data/ruoyi
       #   - /data/ruoyi/upload:/home/ruoyi/uploadPath
       #   - /data/ruoyi/logs:/home/ruoyi/logs
-      - ruoyi-upload:/home/ruoyi/uploadPath
-      - ruoyi-logs:/home/ruoyi/logs
+      - viralai-upload:/home/viralai/uploadPath
+      - viralai-logs:/home/viralai/logs
     ports:
       # 仅内网暴露时绑定到具体网卡，如 "127.0.0.1:8080:8080" 或 "10.0.0.5:8080:8080"
       - "${SERVER_PORT:-8080}:8080"
     networks:
-      - ruoyi-net
+      - viralai-net
     stop_grace_period: 30s
     # 外部依赖不可用时快速暴露问题；start_period 给足远程 DB 首次建连与应用启动时间
     healthcheck:
@@ -106,7 +106,7 @@ services:
     ports:
       - "${WEB_PORT:-80}:80"
     networks:
-      - ruoyi-net
+      - viralai-net
     logging:
       driver: json-file
       options:
@@ -114,9 +114,9 @@ services:
         max-file: "5"
 
 volumes:
-  ruoyi-upload:
-  ruoyi-logs:
+  viralai-upload:
+  viralai-logs:
 
 networks:
-  ruoyi-net:
+  viralai-net:
     driver: bridge

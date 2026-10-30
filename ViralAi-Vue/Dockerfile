@@ -37,24 +37,24 @@ FROM eclipse-temurin:17-jre-jammy
 
 ENV TZ=Asia/Shanghai \
     LANG=C.UTF-8 \
-    JAVA_OPTS="-Xms512m -Xmx1024m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
+    JAVA_OPTS="-Xms512m -Xmx512m -XX:MetaspaceSize=128m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8"
 
 # curl 用于容器健康检查；tzdata 用于时区
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl tzdata \
  && rm -rf /var/lib/apt/lists/* \
  && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
- && groupadd -g 1000 ruoyi \
- && useradd -u 1000 -g ruoyi -m -s /bin/bash ruoyi \
- && mkdir -p /home/ruoyi/logs /home/ruoyi/uploadPath \
- && chown -R ruoyi:ruoyi /home/ruoyi
+ && groupadd -g 1000 viralai \
+ && useradd -u 1000 -g viralai -m -s /bin/bash viralai \
+ && mkdir -p /home/viralai/logs /home/viralai/uploadPath \
+ && chown -R viralai:viralai /home/viralai
 
-WORKDIR /home/ruoyi
+WORKDIR /home/viralai
 
 # 只拷贝可执行 jar（ruoyi-admin.jar.original 不进入镜像）
-COPY --from=build --chown=ruoyi:ruoyi /build/ruoyi-admin/target/ruoyi-admin.jar /home/ruoyi/app.jar
+COPY --from=build --chown=viralai:viralai /build/ruoyi-admin/target/ruoyi-admin.jar /home/viralai/app.jar
 
-USER ruoyi
+USER viralai
 EXPOSE 8080
 
 # /captchaImage 为免登录接口，能正常返回即代表 Spring 上下文已就绪
@@ -62,4 +62,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=6 \
     CMD curl -fsS http://127.0.0.1:8080/captchaImage > /dev/null || exit 1
 
 # exec 让 java 成为 PID 1，docker stop 时能收到 SIGTERM 优雅停机
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /home/ruoyi/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /home/viralai/app.jar"]
