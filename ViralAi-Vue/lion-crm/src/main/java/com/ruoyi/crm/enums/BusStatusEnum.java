@@ -19,17 +19,19 @@ import java.util.stream.Collectors;
  *
  * <p>允许的流转路径（白名单，未列出的一律视为非法流转）：</p>
  * <pre>
- * 0 初始化   → 1 跟进中、6 中断
- * 1 跟进中   → 2 提交测试、4 成交、5 暂停、6 中断
- * 2 提交测试 → 3 测试中、5 暂停、6 中断
- * 3 测试中   → 4 成交、5 暂停、6 中断
- * 4 成交     → 终态，不可再流转
- * 5 暂停     → 1 跟进中、2 提交测试、3 测试中、6 中断
- * 6 中断     → 1 跟进中（重新激活）
+ * 0 初始化   → 1 跟进中
+ * 1 跟进中   → 2 提交测试、5 暂停、6 中断
+ * 2 提交测试 → 3 测试中、1 退回跟进、6 中断
+ * 3 测试中   → 4 成交、1 退回跟进、5 暂停、6 中断
+ * 4 成交     → 终态，不可再流转（仅可转合同、回填结算）
+ * 5 暂停     → 1 恢复跟进、6 中断
+ * 6 中断     → 终态，不可恢复
  * </pre>
  *
+ * <p>注意：成交只能由【测试中】触发，避免跳过测试直接成交；中断为不可恢复终态。</p>
+ *
  * @author ruoyi
- * @date 2026-10-28
+ * @date 2026-11-04
  */
 public enum BusStatusEnum
 {
@@ -82,13 +84,13 @@ public enum BusStatusEnum
     static
     {
         Map<Long, Set<BusStatusEnum>> map = new HashMap<>(16);
-        map.put(INIT.getCode(), EnumSet.of(FOLLOWING, INTERRUPTED));
-        map.put(FOLLOWING.getCode(), EnumSet.of(SUBMIT_TEST, DEAL, PAUSED, INTERRUPTED));
-        map.put(SUBMIT_TEST.getCode(), EnumSet.of(TESTING, PAUSED, INTERRUPTED));
-        map.put(TESTING.getCode(), EnumSet.of(DEAL, PAUSED, INTERRUPTED));
+        map.put(INIT.getCode(), EnumSet.of(FOLLOWING));
+        map.put(FOLLOWING.getCode(), EnumSet.of(SUBMIT_TEST, PAUSED, INTERRUPTED));
+        map.put(SUBMIT_TEST.getCode(), EnumSet.of(TESTING, FOLLOWING, INTERRUPTED));
+        map.put(TESTING.getCode(), EnumSet.of(DEAL, FOLLOWING, PAUSED, INTERRUPTED));
         map.put(DEAL.getCode(), EnumSet.noneOf(BusStatusEnum.class));
-        map.put(PAUSED.getCode(), EnumSet.of(FOLLOWING, SUBMIT_TEST, TESTING, INTERRUPTED));
-        map.put(INTERRUPTED.getCode(), EnumSet.of(FOLLOWING));
+        map.put(PAUSED.getCode(), EnumSet.of(FOLLOWING, INTERRUPTED));
+        map.put(INTERRUPTED.getCode(), EnumSet.noneOf(BusStatusEnum.class));
         TRANSITIONS = Collections.unmodifiableMap(map);
     }
 
@@ -115,6 +117,17 @@ public enum BusStatusEnum
     }
 
     /**
+     * 校验状态码合法性，非法直接返回 null 由调用方抛业务异常
+     *
+     * @param code 状态码
+     * @return 枚举
+     */
+    public static BusStatusEnum require(Long code)
+    {
+        return of(code);
+    }
+
+    /**
      * 判断当前状态是否允许流转到目标状态
      *
      * @param target 目标状态
@@ -131,7 +144,7 @@ public enum BusStatusEnum
     }
 
     /**
-     * 获取当前状态允许流转到的目标状态列表
+     * 获取当前状态允许流转到的目标状态列表（按状态码升序）
      *
      * @return 目标状态列表，终态返回空集合
      */
@@ -148,7 +161,7 @@ public enum BusStatusEnum
     }
 
     /**
-     * 是否为终态（无可流转目标）
+     * 是否为终态
      */
     public boolean isFinal()
     {
@@ -156,15 +169,58 @@ public enum BusStatusEnum
     }
 
     /**
+     * 是否允许编辑商机基础信息
+     *
+     * <p>仅【初始化】【跟进中】可编辑；其余状态（含提交测试）主信息与产品清单一并锁定。</p>
+     *
+     * @return 允许编辑返回 true
+     */
+    public boolean isMainEditable()
+    {
+        return this == INIT || this == FOLLOWING;
+    }
+
+    /**
+     * 是否允许维护意向产品清单
+     *
+     * <p>需求约定：状态 &gt;= 2（提交测试及以后）产品清单锁定，防止报价随意变更。</p>
+     *
+     * @return 允许维护返回 true
+     */
+    public boolean isProductEditable()
+    {
+        return this == INIT || this == FOLLOWING;
+    }
+
+    /**
      * 是否允许删除
      *
-     * <p>仅【初始化】【跟进中】可删除；进入【提交测试】及之后的状态已启动测试与成交流程，
-     * 删除会丢失过程数据，因此一律禁止。</p>
+     * <p>仅【初始化】【跟进中】可删除；成交 / 测试中 / 中断等状态禁止删除。</p>
      *
      * @return 允许删除返回 true
      */
     public boolean isDeletable()
     {
         return this == INIT || this == FOLLOWING;
+    }
+
+    /**
+     * 是否允许转合同
+     *
+     * @return 成交状态返回 true
+     */
+    public boolean isConvertible()
+    {
+        return this == DEAL;
+    }
+
+    /**
+     * 是否允许回填结算状态
+     *
+     * @return 成交后允许回填
+     */
+    public boolean isSettleEditable()
+    {
+        return this == DEAL;
     }
 }

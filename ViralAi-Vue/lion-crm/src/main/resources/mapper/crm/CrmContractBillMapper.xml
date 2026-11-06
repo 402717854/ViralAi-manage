@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmContractBillMapper">
+
+    <resultMap type="CrmContractBill" id="CrmContractBillResult">
+        <result property="id"                 column="id"                   />
+        <result property="billNo"             column="bill_no"              />
+        <result property="contractId"         column="contract_id"          />
+        <result property="customerId"         column="customer_id"          />
+        <result property="supplierId"         column="supplier_id"          />
+        <result property="supplierAccountId"  column="supplier_account_id"  />
+        <result property="billCycle"          column="bill_cycle"           />
+        <result property="startTime"          column="start_time"           />
+        <result property="endTime"            column="end_time"             />
+        <result property="totalTokens"        column="total_tokens"         />
+        <result property="totalSellAmount"    column="total_sell_amount"    />
+        <result property="totalCostAmount"    column="total_cost_amount"    />
+        <result property="totalGrossProfit"   column="total_gross_profit"   />
+        <result property="billStatus"         column="bill_status"          />
+        <result property="remark"             column="remark"               />
+        <result property="creator"            column="creator"              />
+        <result property="auditor"            column="auditor"              />
+        <result property="auditTime"          column="audit_time"           />
+        <result property="createTime"         column="create_time"          />
+        <result property="updateTime"         column="update_time"          />
+    </resultMap>
+
+    <sql id="selectBillJoinColumns">
+        select a.id, a.bill_no, a.contract_id, ct.contact_no, ct.contract_name,
+               a.customer_id, cu.name as customer_name,
+               a.supplier_id, s.name as supplier_name,
+               a.bill_cycle, a.start_time, a.end_time,
+               a.total_tokens, a.total_sell_amount, a.total_cost_amount, a.total_gross_profit,
+               a.bill_status, a.remark, a.auditor, au.user_name as auditor_name, a.audit_time,
+               a.creator, cr.user_name as creator_name, a.create_time, a.update_time,
+               (select count(1) from crm_contract_usage u where u.bill_id = a.id) as usage_count,
+               (select count(1) from crm_contract_bill_diff d
+                 where d.handle_status = 0 and d.supplier_id = a.supplier_id
+                   and d.call_time &gt;= a.start_time and d.call_time &lt;= a.end_time) as pending_diff_count
+        from crm_contract_bill a
+        left join crm_contract ct on a.contract_id = ct.id
+        left join crm_customer cu on a.customer_id = cu.id
+        left join crm_supplier s on a.supplier_id = s.id
+        left join sys_user au on a.auditor = au.user_id
+        left join sys_user cr on a.creator = cr.user_id
+    </sql>
+
+    <select id="selectCrmContractBillList" parameterType="com.ruoyi.crm.dto.CrmContractBillDto"
+            resultType="com.ruoyi.crm.dto.CrmContractBillDto">
+        <include refid="selectBillJoinColumns"/>
+        <where>
+            <if test="billNo != null and billNo != ''"> and a.bill_no like concat('%', #{billNo}, '%')</if>
+            <if test="contractId != null"> and a.contract_id = #{contractId}</if>
+            <if test="contactNo != null and contactNo != ''"> and ct.contact_no like concat('%', #{contactNo}, '%')</if>
+            <if test="customerId != null"> and a.customer_id = #{customerId}</if>
+            <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+            <if test="billCycle != null and billCycle != ''"> and a.bill_cycle = #{billCycle}</if>
+            <if test="billStatus != null"> and a.bill_status = #{billStatus}</if>
+            <if test="params.statusList != null and params.statusList != ''">
+                and find_in_set(a.bill_status, #{params.statusList})
+            </if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+            <if test="params.scopeSupplierIds != null and params.scopeSupplierIds.size() > 0">
+                and a.supplier_id in
+                <foreach collection="params.scopeSupplierIds" item="scopeSupplierId" open="(" separator="," close=")">
+                    #{scopeSupplierId}
+                </foreach>
+            </if>
+        </where>
+        order by a.bill_cycle desc, a.id desc
+    </select>
+
+    <select id="selectCrmContractBillDetail" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmContractBillDto">
+        <include refid="selectBillJoinColumns"/>
+        where a.id = #{id}
+    </select>
+
+    <select id="selectCrmContractBillById" parameterType="Long" resultMap="CrmContractBillResult">
+        select id, bill_no, contract_id, customer_id, supplier_id, supplier_account_id, bill_cycle,
+               start_time, end_time,
+               total_tokens, total_sell_amount, total_cost_amount, total_gross_profit,
+               bill_status, remark, creator, auditor, audit_time, create_time, update_time
+        from crm_contract_bill
+        where id = #{id}
+    </select>
+
+    <insert id="insertCrmContractBill" parameterType="CrmContractBill" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_contract_bill (
+            bill_no, contract_id, customer_id, supplier_id, supplier_account_id, bill_cycle,
+            start_time, end_time,
+            total_tokens, total_sell_amount, total_cost_amount, total_gross_profit,
+            bill_status, remark, creator, create_time
+        ) values (
+            #{billNo}, #{contractId}, #{customerId}, #{supplierId}, ifnull(#{supplierAccountId}, 0),
+            #{billCycle}, #{startTime}, #{endTime},
+            ifnull(#{totalTokens}, 0), ifnull(#{totalSellAmount}, 0), ifnull(#{totalCostAmount}, 0),
+            ifnull(#{totalGrossProfit}, 0), ifnull(#{billStatus}, 1), #{remark},
+            #{creator}, ifnull(#{createTime}, sysdate())
+        )
+    </insert>
+
+    <update id="updateBillAudit">
+        update crm_contract_bill
+        set bill_status = #{billStatus},
+            remark      = #{remark},
+            auditor     = #{auditor},
+            audit_time  = #{auditTime},
+            update_time = sysdate()
+        where id = #{id}
+    </update>
+
+    <!-- 同合同同渠道同账期的账单数：合同可跨渠道，必须按渠道区分 -->
+    <!-- 口径 B（允许补充账单）：同账期可有多张，故不建 (contract_id, supplier_account_id, bill_cycle) 唯一键，
+         唯一性由 uk_bill_no 保证 -->
+    <select id="countByContractAndCycle" resultType="java.lang.Integer">
+        select count(1) from crm_contract_bill
+        where contract_id = #{contractId} and supplier_id = #{supplierId} and bill_cycle = #{billCycle}
+    </select>
+
+    <select id="countBySupplierAndCycle" resultType="java.lang.Integer">
+        select count(1) from crm_contract_bill
+        where supplier_id = #{supplierId} and bill_cycle = #{billCycle}
+    </select>
+
+    <select id="countBillsByCycle" resultType="java.lang.Integer">
+        select count(1) from crm_contract_bill
+        where bill_cycle = #{billCycle}
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and supplier_id in
+            <foreach collection="supplierIds" item="supplierId" open="(" separator="," close=")">
+                #{supplierId}
+            </foreach>
+        </if>
+    </select>
+
+    <delete id="deleteCrmContractBillById" parameterType="Long">
+        delete from crm_contract_bill where id = #{id}
+    </delete>
+</mapper>

@@ -131,7 +131,7 @@
     <!-- CRM 客户详情抽屉 -->
     <customer-view-drawer ref="customerViewRef" />
     <!-- 添加或修改CRM 客户对话框 -->
-    <el-dialog :title="title" v-model="open" width="500px" append-to-body>
+    <el-dialog :title="title" v-model="open" width="640px" append-to-body>
       <el-form ref="customerRef" :model="form" :rules="rules" label-width="100px">
         <el-row>
           <el-col :span="24">
@@ -177,6 +177,25 @@
             </el-form-item>
           </el-col>
           <el-col :span="24">
+            <el-form-item label="关联渠道" prop="supplierIds">
+              <!-- 一个客户可关联多个渠道，商机/合同的明细行渠道只能从客户已关联渠道中选择 -->
+              <el-select
+                v-model="form.supplierIds"
+                multiple
+                filterable
+                clearable
+                collapse-tags
+                collapse-tags-tooltip
+                :loading="supplierLoading"
+                placeholder="请选择该客户可用的渠道"
+                style="width: 100%"
+              >
+                <el-option v-for="item in supplierOptions" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+              <div class="field-tip">渠道下已关联的模型将作为商机/合同明细的可选模型来源</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
             <el-form-item label="备注" prop="remark">
               <el-input v-model="form.remark" type="textarea" placeholder="请输入内容" />
             </el-form-item>
@@ -194,7 +213,8 @@
 </template>
 
 <script setup name="Customer">
-import { listCustomer, getCustomer, delCustomer, addCustomer, updateCustomer } from "@/api/crm/customer"
+import { listCustomer, getCustomer, delCustomer, addCustomer, updateCustomer, getCustomerSuppliers } from "@/api/crm/customer"
+import { getSupplierOptions } from "@/api/crm/supplier"
 import CustomerViewDrawer from "./view"
 
 const { proxy } = getCurrentInstance()
@@ -214,6 +234,9 @@ const single = ref(true)
 const multiple = ref(true)
 const total = ref(0)
 const title = ref("")
+/** 渠道下拉：全部渠道 */
+const supplierOptions = ref([])
+const supplierLoading = ref(false)
 
 const data = reactive({
   form: {},
@@ -267,9 +290,20 @@ function reset() {
     email: null,
     detailAddress: null,
     industry: null,
-    remark: null
+    remark: null,
+    supplierIds: []
   }
   proxy.resetForm("customerRef")
+}
+
+/** 加载全部渠道选项 */
+function loadSupplierOptions() {
+  supplierLoading.value = true
+  getSupplierOptions().then(res => {
+    supplierOptions.value = res.data || []
+  }).finally(() => {
+    supplierLoading.value = false
+  })
 }
 
 /** 搜索按钮操作 */
@@ -312,6 +346,16 @@ function handleUpdate(row) {
     form.value = detail
     open.value = true
     title.value = "修改CRM 客户"
+    return loadCustomerSuppliers(_id)
+  })
+}
+
+/** 回显客户已关联的渠道 */
+function loadCustomerSuppliers(customerId) {
+  return getCustomerSuppliers(customerId).then(res => {
+    form.value.supplierIds = (res.data || []).map(item => item.supplierId)
+  }).catch(() => {
+    form.value.supplierIds = []
   })
 }
 
@@ -360,4 +404,13 @@ function handleExport() {
 }
 
 getList()
+loadSupplierOptions()
 </script>
+
+<style scoped>
+.field-tip {
+  font-size: 12px;
+  line-height: 18px;
+  color: #909399;
+}
+</style>

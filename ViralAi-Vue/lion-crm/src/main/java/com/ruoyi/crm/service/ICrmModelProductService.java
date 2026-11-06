@@ -91,4 +91,14 @@ public interface ICrmModelProductService
      * @return 结果
      */
     public int updateCrmModelProductWithBilling(CrmModelProductFormDto form);
+
+    /**
+     * 查询指定渠道下已关联且启用的模型产品
+     * <p>
+     * 合同明细新增下拉的唯一数据源，只返回该渠道上架的模型，避免跨渠道选择。
+     *
+     * @param supplierId 渠道ID
+     * @return 模型产品集合
+     */
+    public List<CrmModelProductDto> selectProductsBySupplier(Long supplierId);
 }

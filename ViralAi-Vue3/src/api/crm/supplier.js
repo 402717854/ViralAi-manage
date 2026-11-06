@@ -33,6 +33,14 @@ export function getSupplierProjects(id) {
   })
 }
 
+// 按供应商ID查询其渠道账户列表（apiKey 已脱敏，不含账户密码）
+export function getSupplierAccounts(id) {
+  return request({
+    url: '/crm/supplier/' + id + '/accounts',
+    method: 'get'
+  })
+}
+
 // 新增CRM 供应商
 export function addSupplier(data) {
   return request({

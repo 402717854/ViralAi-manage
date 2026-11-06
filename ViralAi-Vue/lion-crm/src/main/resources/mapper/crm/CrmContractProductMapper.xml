@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmContractProductMapper">
+
+    <resultMap type="CrmContractProduct" id="CrmContractProductResult">
+        <result property="id"    column="id"    />
+        <result property="contractId"    column="contract_id"    />
+        <result property="supplierId"    column="supplier_id"    />
+        <result property="supplierAccountId"    column="supplier_account_id"    />
+        <result property="productId"    column="product_id"    />
+        <result property="costDiscount"    column="cost_discount"    />
+        <result property="sellDiscount"    column="sell_discount"    />
+        <result property="priceDetail"    column="price_detail"    />
+        <result property="remark"    column="remark"    />
+        <result property="creator"    column="creator"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updater"    column="updater"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="deleted"    column="deleted"    />
+    </resultMap>
+
+    <!-- 明细渠道由行承载，联查渠道名称与渠道账户名用于列表/详情展示 -->
+    <select id="selectContractProductList" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmContractProductDto">
+        select cp.id, cp.contract_id, cp.supplier_id, cp.supplier_account_id, cp.product_id,
+               p.name as product_name, p.no as product_no, p.type as product_type,
+               s.name as supplier_name,
+               sa.account_name as supplier_account_name, sa.type as supplier_account_type,
+               cp.cost_discount, cp.sell_discount, cp.price_detail, cp.remark
+        from crm_contract_product cp
+        left join crm_model_product p on cp.product_id = p.id
+        left join crm_supplier s on cp.supplier_id = s.id
+        left join crm_supplier_account sa on cp.supplier_account_id = sa.id
+        where cp.deleted = 0 and cp.contract_id = #{contractId}
+        order by cp.supplier_id, cp.product_id
+    </select>
+
+    <select id="selectContractProductById" parameterType="Long" resultMap="CrmContractProductResult">
+        select id, contract_id, supplier_id, supplier_account_id, product_id, cost_discount, sell_discount,
+               price_detail, remark, creator, create_time, updater, update_time, deleted
+        from crm_contract_product
+        where id = #{id} and deleted = 0
+    </select>
+
+    <select id="countContractProductByContractId" parameterType="Long" resultType="java.lang.Integer">
+        select count(1) from crm_contract_product where contract_id = #{contractId} and deleted = 0
+    </select>
+
+    <insert id="batchInsertContractProduct">
+        insert into crm_contract_product
+        (contract_id, supplier_id, supplier_account_id, product_id, cost_discount, sell_discount, price_detail, remark,
+         creator, create_time, updater, update_time, deleted)
+        values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.contractId}, #{item.supplierId}, #{item.supplierAccountId}, #{item.productId},
+             #{item.costDiscount}, #{item.sellDiscount}, #{item.priceDetail}, #{item.remark},
+             #{item.creator}, #{item.createTime}, #{item.updater}, #{item.updateTime}, 0)
+        </foreach>
+    </insert>
+
+    <!-- 明细为合同内部数据，全量替换时物理删除，避免逻辑删除行占用 (contract_id, product_id) 唯一索引 -->
+    <delete id="deleteContractProductByContractId" parameterType="Long">
+        delete from crm_contract_product where contract_id = #{contractId}
+    </delete>
+
+    <delete id="deleteContractProductById" parameterType="Long">
+        delete from crm_contract_product where id = #{id}
+    </delete>
+</mapper>

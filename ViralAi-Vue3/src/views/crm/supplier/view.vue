@@ -117,12 +117,50 @@
           <template #default="scope">{{ formatAmount(scope.row.dailyUsageAmount) }}</template>
         </el-table-column>
       </el-table>
+      <h4 class="section-header">渠道账户</h4>
+      <el-alert
+          v-if="accountsError"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="渠道账户加载失败，请稍后重试"
+          class="mb8"
+      />
+      <el-table v-else :data="accounts" border size="small" class="mb8" empty-text="暂无渠道账户">
+        <el-table-column label="账户名" min-width="140" prop="accountName" show-overflow-tooltip />
+        <el-table-column label="apiKey编号" min-width="130" show-overflow-tooltip>
+          <template #default="scope">{{ scope.row.apiKeyNo || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="apiKey" min-width="210" show-overflow-tooltip>
+          <template #default="scope">
+            <span class="mono">{{ scope.row.apiKey || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="账户类型" width="100" align="center">
+          <template #default="scope">
+            <el-tag :type="scope.row.type === 2 ? 'success' : 'info'" size="small" effect="plain">
+              {{ accountTypeLabel(scope.row.type) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90" align="center">
+          <template #default="scope">
+            <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'" size="small" effect="plain">
+              {{ scope.row.status === 1 ? '启用' : '未启用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建者" width="110" align="center">
+          <template #default="scope">{{ scope.row.creatorName || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="165" align="center" prop="createTime" />
+      </el-table>
     </div>
   </el-drawer>
 </template>
 
 <script setup name="SupplierViewDrawer">
-import { getSupplier, getSupplierProjects } from '@/api/crm/supplier'
+import { getSupplier, getSupplierProjects, getSupplierAccounts } from '@/api/crm/supplier'
 
 const { proxy } = getCurrentInstance()
 
@@ -134,6 +172,23 @@ const info = reactive({})
 const projects = ref([])
 /** 产品明细接口是否加载失败（失败时不再渲染表格，避免误显示为「无关联」） */
 const projectsError = ref(false)
+
+/** 渠道账户列表：来自 /crm/supplier/{id}/accounts，apiKey 已由后端脱敏 */
+const accounts = ref([])
+/** 账户接口是否加载失败（失败时同样不渲染空表，避免误判为「无账户」） */
+const accountsError = ref(false)
+
+/** 账户类型选项：与后端 type 约定一致（1测试账户 2真实账户） */
+const accountTypeOptions = [
+  { label: '测试账户', value: 1 },
+  { label: '真实账户', value: 2 }
+]
+
+/** 账户类型文案 */
+function accountTypeLabel(value) {
+  const hit = accountTypeOptions.find(item => item.value === value)
+  return hit ? hit.label : '-'
+}
 
 /** 数值展示：空值显示 -，有值统一保留两位小数 */
 function formatNumber(value) {
@@ -168,6 +223,8 @@ function clearInfo() {
   Object.keys(info).forEach(key => delete info[key])
   projects.value = []
   projectsError.value = false
+  accounts.value = []
+  accountsError.value = false
 }
 
 /** 打开详情抽屉：基本信息与产品明细并发加载 */
@@ -180,17 +237,24 @@ async function open(id) {
   loading.value = true
   clearInfo()
   try {
-    const [detailRes, projectRes] = await Promise.all([
+    const [detailRes, projectRes, accountRes] = await Promise.all([
       getSupplier(id),
       // 明细接口单独处理失败：避免整页报错，也避免把「加载失败」误显示为「无关联」
       getSupplierProjects(id).catch(error => {
         console.error('获取供应商产品明细失败:', error)
         projectsError.value = true
         return null
+      }),
+      // 账户列表独立容错：账户接口异常不应影响基本信息与产品明细展示
+      getSupplierAccounts(id).catch(error => {
+        console.error('获取供应商渠道账户失败:', error)
+        accountsError.value = true
+        return null
       })
     ])
     Object.assign(info, detailRes.data || {})
     projects.value = projectRes && Array.isArray(projectRes.data) ? projectRes.data : []
+    accounts.value = accountRes && Array.isArray(accountRes.data) ? accountRes.data : []
   } catch (error) {
     console.error('获取CRM 供应商信息失败:', error)
   } finally {
@@ -211,3 +275,10 @@ function handleClose(done) {
 
 defineExpose({ open })
 </script>
+
+<style scoped>
+.mono {
+  font-family: Consolas, Monaco, "Courier New", monospace;
+  font-size: 12px;
+}
+</style>

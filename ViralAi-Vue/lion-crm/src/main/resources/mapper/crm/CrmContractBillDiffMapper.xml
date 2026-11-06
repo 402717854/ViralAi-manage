@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmContractBillDiffMapper">
+
+    <resultMap type="CrmContractBillDiff" id="CrmContractBillDiffResult">
+        <result property="id"           column="id"            />
+        <result property="billId"       column="bill_id"       />
+        <result property="usageId"      column="usage_id"      />
+        <result property="diffType"     column="diff_type"     />
+        <result property="diffDesc"     column="diff_desc"     />
+        <result property="supplierId"   column="supplier_id"   />
+        <result property="customerId"   column="customer_id"   />
+        <result property="callNo"       column="call_no"       />
+        <result property="callTime"     column="call_time"     />
+        <result property="amount"       column="amount"        />
+        <result property="handleStatus" column="handle_status" />
+        <result property="handleRemark" column="handle_remark" />
+        <result property="handler"      column="handler"       />
+        <result property="handleTime"   column="handle_time"   />
+        <result property="createTime"   column="create_time"   />
+    </resultMap>
+
+    <sql id="selectDiffJoinColumns">
+        select a.id, a.bill_id, b.bill_no, a.usage_id, a.diff_type, a.diff_desc,
+               a.supplier_id, s.name as supplier_name,
+               a.customer_id, cu.name as customer_name,
+               a.call_no, a.call_time, a.amount,
+               a.handle_status, a.handle_remark, a.handler, h.user_name as handler_name,
+               a.handle_time, a.create_time
+        from crm_contract_bill_diff a
+        left join crm_contract_bill b on a.bill_id = b.id
+        left join crm_supplier s on a.supplier_id = s.id
+        left join crm_customer cu on a.customer_id = cu.id
+        left join sys_user h on a.handler = h.user_id
+    </sql>
+
+    <select id="selectCrmContractBillDiffList" parameterType="com.ruoyi.crm.dto.CrmContractBillDiffDto"
+            resultType="com.ruoyi.crm.dto.CrmContractBillDiffDto">
+        <include refid="selectDiffJoinColumns"/>
+        <where>
+            <if test="billId != null"> and a.bill_id = #{billId}</if>
+            <if test="usageId != null"> and a.usage_id = #{usageId}</if>
+            <if test="diffType != null"> and a.diff_type = #{diffType}</if>
+            <if test="handleStatus != null"> and a.handle_status = #{handleStatus}</if>
+            <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+            <if test="customerId != null"> and a.customer_id = #{customerId}</if>
+            <if test="callNo != null and callNo != ''"> and a.call_no like concat('%', #{callNo}, '%')</if>
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.call_time &gt;= (case when char_length(#{params.beginTime}) &lt;= 10
+                                           then concat(#{params.beginTime}, ' 00:00:00') else #{params.beginTime} end)
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.call_time &lt;= (case when char_length(#{params.endTime}) &lt;= 10
+                                           then concat(#{params.endTime}, ' 23:59:59') else #{params.endTime} end)
+            </if>
+            <if test="params.scopeSupplierIds != null and params.scopeSupplierIds.size() > 0">
+                and a.supplier_id in
+                <foreach collection="params.scopeSupplierIds" item="scopeSupplierId" open="(" separator="," close=")">
+                    #{scopeSupplierId}
+                </foreach>
+            </if>
+        </where>
+        order by a.handle_status, a.call_time desc, a.id desc
+    </select>
+
+    <select id="selectCrmContractBillDiffById" parameterType="Long"
+            resultType="com.ruoyi.crm.dto.CrmContractBillDiffDto">
+        <include refid="selectDiffJoinColumns"/>
+        where a.id = #{id}
+    </select>
+
+    <select id="selectCrmContractBillDiffEntity" parameterType="Long" resultMap="CrmContractBillDiffResult">
+        select id, bill_id, usage_id, diff_type, diff_desc, supplier_id, customer_id,
+               call_no, call_time, amount, handle_status, handle_remark, handler, handle_time, create_time
+        from crm_contract_bill_diff
+        where id = #{id}
+    </select>
+
+    <insert id="insertCrmContractBillDiff" parameterType="CrmContractBillDiff" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_contract_bill_diff (
+            bill_id, usage_id, diff_type, diff_desc, supplier_id, customer_id,
+            call_no, call_time, amount, handle_status, handle_remark, handler, handle_time, create_time
+        ) values (
+            #{billId}, #{usageId}, #{diffType}, #{diffDesc}, #{supplierId}, #{customerId},
+            #{callNo}, #{callTime}, #{amount}, ifnull(#{handleStatus}, 0), #{handleRemark},
+            #{handler}, #{handleTime}, ifnull(#{createTime}, sysdate())
+        )
+    </insert>
+
+    <update id="updateDiffHandle">
+        update crm_contract_bill_diff
+        set handle_status = #{handleStatus},
+            handle_remark = #{handleRemark},
+            handler       = #{handler},
+            handle_time   = #{handleTime}
+        where id = #{id}
+    </update>
+
+    <select id="countPending" resultType="java.lang.Integer">
+        select count(1) from crm_contract_bill_diff
+        where handle_status = 0
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and supplier_id in
+            <foreach collection="supplierIds" item="supplierId" open="(" separator="," close=")">
+                #{supplierId}
+            </foreach>
+        </if>
+        <if test="startTime != null"> and call_time &gt;= #{startTime}</if>
+        <if test="endTime != null"> and call_time &lt;= #{endTime}</if>
+    </select>
+</mapper>

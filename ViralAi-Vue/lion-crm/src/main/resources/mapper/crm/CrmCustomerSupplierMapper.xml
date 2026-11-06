@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmCustomerSupplierMapper">
+
+    <select id="selectSupplierListByCustomerId" parameterType="Long"
+            resultType="com.ruoyi.crm.dto.CrmCustomerSupplierDto">
+        select cs.supplier_id, s.name as supplier_name, s.supplier_code, s.status
+        from crm_customer_supplier cs
+        inner join crm_supplier s on cs.supplier_id = s.id and s.deleted = 0
+        where cs.customer_id = #{customerId}
+        order by s.status desc, s.id
+    </select>
+
+    <select id="selectSupplierIdsByCustomerId" parameterType="Long" resultType="java.lang.Long">
+        select supplier_id from crm_customer_supplier where customer_id = #{customerId}
+    </select>
+
+    <!-- 客户可用模型 = 客户关联渠道 × 渠道已上架模型（crm_supplier_project） -->
+    <select id="selectProductsByCustomerId" parameterType="Long"
+            resultType="com.ruoyi.crm.dto.CrmCustomerProductDto">
+        select cs.supplier_id, s.name as supplier_name,
+               p.id, p.name, p.no, p.product_code, p.type, p.source, p.price_detail,
+               p.base_sell_price, p.base_cost_price, p.status, p.description,
+               sp.min_cost_discount, sp.max_cost_discount, sp.min_sell_discount, sp.max_sell_discount,
+               sp.min_agent_discount, sp.max_agent_discount, sp.daily_usage_amount
+        from crm_customer_supplier cs
+        inner join crm_supplier s on s.id = cs.supplier_id and s.deleted = 0
+        inner join crm_supplier_project sp on sp.supplier_id = cs.supplier_id
+        inner join crm_model_product p on sp.project_id = p.id
+        where cs.customer_id = #{customerId}
+          and p.deleted = 0 and p.status = 1
+        order by s.id, p.id
+    </select>
+
+    <delete id="deleteByCustomerId" parameterType="Long">
+        delete from crm_customer_supplier where customer_id = #{customerId}
+    </delete>
+
+    <insert id="batchInsert">
+        insert into crm_customer_supplier (customer_id, supplier_id, creator, create_time)
+        values
+        <foreach collection="supplierIds" item="supplierId" separator=",">
+            (#{customerId}, #{supplierId}, #{creator}, sysdate())
+        </foreach>
+    </insert>
+
+</mapper>

@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmContractUsageMapper">
+
+    <resultMap type="CrmContractUsage" id="CrmContractUsageResult">
+        <result property="id"                column="id"                  />
+        <result property="callLogId"         column="call_log_id"         />
+        <result property="callNo"            column="call_no"             />
+        <result property="contractId"        column="contract_id"         />
+        <result property="contractProductId" column="contract_product_id" />
+        <result property="customerId"        column="customer_id"         />
+        <result property="supplierId"        column="supplier_id"         />
+        <result property="supplierAccountId" column="supplier_account_id" />
+        <result property="productId"         column="product_id"          />
+        <result property="productCode"       column="product_code"        />
+        <result property="totalTokens"       column="total_tokens"        />
+        <result property="totalFees"       column="total_fees"        />
+        <result property="baseSellPrice"     column="base_sell_price"     />
+        <result property="sellDiscount"      column="sell_discount"       />
+        <result property="sellAmount"        column="sell_amount"         />
+        <result property="baseCostPrice"     column="base_cost_price"     />
+        <result property="costDiscount"      column="cost_discount"       />
+        <result property="costAmount"        column="cost_amount"         />
+        <result property="grossProfit"       column="gross_profit"        />
+        <result property="matchStatus"       column="match_status"        />
+        <result property="matchMsg"          column="match_msg"           />
+        <result property="callTime"          column="call_time"           />
+        <result property="billId"            column="bill_id"             />
+        <result property="usageType"         column="usage_type"          />
+        <result property="refUsageId"        column="ref_usage_id"        />
+        <result property="createTime"        column="create_time"         />
+        <result property="updateTime"        column="update_time"         />
+    </resultMap>
+
+    <sql id="selectUsageJoinColumns">
+        select a.id, a.call_log_id, a.call_no, a.contract_id, ct.contact_no,
+               a.contract_product_id, a.customer_id, cu.name as customer_name,
+               a.supplier_id, s.name as supplier_name,
+               a.supplier_account_id, sa.account_name as supplier_account_name,
+               a.product_id, a.product_code, mp.no as model_no,
+               a.total_tokens, a.total_fees, a.base_sell_price, a.sell_discount, a.sell_amount,
+               a.base_cost_price, a.cost_discount, a.cost_amount, a.gross_profit,
+               a.match_status, a.match_msg, a.call_time, a.bill_id, b.bill_no,
+               a.usage_type, a.ref_usage_id, a.create_time, a.update_time
+        from crm_contract_usage a
+        left join crm_contract ct on a.contract_id = ct.id
+        left join crm_customer cu on a.customer_id = cu.id
+        left join crm_supplier s on a.supplier_id = s.id
+        left join crm_supplier_account sa on a.supplier_account_id = sa.id
+        left join crm_model_product mp on a.product_id = mp.id
+        left join crm_contract_bill b on a.bill_id = b.id
+    </sql>
+
+    <select id="selectCrmContractUsageList" parameterType="com.ruoyi.crm.dto.CrmContractUsageDto"
+            resultType="com.ruoyi.crm.dto.CrmContractUsageDto">
+        <include refid="selectUsageJoinColumns"/>
+        <where>
+            <if test="callNo != null and callNo != ''"> and a.call_no like concat('%', #{callNo}, '%')</if>
+            <if test="customerId != null"> and a.customer_id = #{customerId}</if>
+            <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+            <if test="supplierAccountId != null and supplierAccountId > 0"> and a.supplier_account_id = #{supplierAccountId}</if>
+            <if test="contractId != null"> and a.contract_id = #{contractId}</if>
+            <if test="billId != null"> and a.bill_id = #{billId}</if>
+            <if test="productCode != null and productCode != ''"> and a.product_code like concat('%', #{productCode}, '%')</if>
+            <if test="matchStatus != null"> and a.match_status = #{matchStatus}</if>
+            <if test="usageType != null"> and a.usage_type = #{usageType}</if>
+            <if test="contactNo != null and contactNo != ''"> and ct.contact_no like concat('%', #{contactNo}, '%')</if>
+            <!-- 匹配状态多选：前端以逗号分隔字符串传参 -->
+            <if test="params.matchStatusList != null and params.matchStatusList != ''">
+                and find_in_set(a.match_status, #{params.matchStatusList})
+            </if>
+            <!-- 调用时间范围（计费归属时间） -->
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.call_time &gt;= (case when char_length(#{params.beginTime}) &lt;= 10
+                                           then concat(#{params.beginTime}, ' 00:00:00') else #{params.beginTime} end)
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.call_time &lt;= (case when char_length(#{params.endTime}) &lt;= 10
+                                           then concat(#{params.endTime}, ' 23:59:59') else #{params.endTime} end)
+            </if>
+            <!-- 数据权限：渠道管理员按渠道过滤 -->
+            <if test="params.scopeSupplierIds != null and params.scopeSupplierIds.size() > 0">
+                and a.supplier_id in
+                <foreach collection="params.scopeSupplierIds" item="scopeSupplierId" open="(" separator="," close=")">
+                    #{scopeSupplierId}
+                </foreach>
+            </if>
+        </where>
+        order by a.call_time desc, a.id desc
+    </select>
+
+    <select id="selectCrmContractUsageById" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmContractUsageDto">
+        <include refid="selectUsageJoinColumns"/>
+        where a.id = #{id}
+    </select>
+
+    <select id="selectCrmContractUsageEntity" parameterType="Long" resultMap="CrmContractUsageResult">
+        select id, call_log_id, call_no, contract_id, contract_product_id, customer_id, supplier_id,
+               supplier_account_id,
+               product_id, product_code, total_tokens, total_fees, base_sell_price, sell_discount, sell_amount,
+               base_cost_price, cost_discount, cost_amount, gross_profit, match_status, match_msg,
+               call_time, bill_id, usage_type, ref_usage_id, create_time, update_time
+        from crm_contract_usage
+        where id = #{id}
+    </select>
+
+    <insert id="insertCrmContractUsage" parameterType="CrmContractUsage" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_contract_usage (
+            call_log_id, call_no, contract_id, contract_product_id, customer_id, supplier_id,
+            supplier_account_id,
+            product_id, product_code, total_tokens,total_fees, base_sell_price, sell_discount, sell_amount,
+            base_cost_price, cost_discount, cost_amount, gross_profit, match_status, match_msg,
+            call_time, bill_id, usage_type, ref_usage_id, create_time
+        ) values (
+            #{callLogId}, #{callNo}, #{contractId}, #{contractProductId}, #{customerId}, #{supplierId},
+            ifnull(#{supplierAccountId}, 0),
+            #{productId}, #{productCode}, ifnull(#{totalTokens}, 0), ifnull(#{totalFees}, 0), #{baseSellPrice}, #{sellDiscount}, #{sellAmount},
+            #{baseCostPrice}, #{costDiscount}, #{costAmount}, #{grossProfit}, #{matchStatus}, #{matchMsg},
+            #{callTime}, #{billId}, ifnull(#{usageType}, 0), #{refUsageId}, ifnull(#{createTime}, sysdate())
+        )
+    </insert>
+
+    <!-- 只更新匹配结果字段，账单归属与冲销关系不在此处变更 -->
+    <update id="updateCrmContractUsage" parameterType="CrmContractUsage">
+        update crm_contract_usage
+        set contract_id         = #{contractId},
+            contract_product_id = #{contractProductId},
+            supplier_account_id = ifnull(#{supplierAccountId}, supplier_account_id),
+            product_id          = #{productId},
+            total_tokens        = ifnull(#{totalTokens}, total_tokens),
+            total_fees          = ifnull(#{totalFees}, total_fees),
+            base_sell_price     = #{baseSellPrice},
+            sell_discount       = #{sellDiscount},
+            sell_amount         = #{sellAmount},
+            base_cost_price     = #{baseCostPrice},
+            cost_discount       = #{costDiscount},
+            cost_amount         = #{costAmount},
+            gross_profit        = #{grossProfit},
+            match_status        = #{matchStatus},
+            match_msg           = #{matchMsg},
+            update_time         = sysdate()
+        where id = #{id} and bill_id is null
+    </update>
+
+    <!-- 待重试台账：已生成账单的用量只读，不参与重新匹配 -->
+    <select id="selectRematchUsages" resultMap="CrmContractUsageResult">
+        select id, call_log_id, call_no, contract_id, contract_product_id, customer_id, supplier_id,
+               supplier_account_id,
+               product_id, product_code, total_tokens, total_fees, base_sell_price, sell_discount, sell_amount,
+               base_cost_price, cost_discount, cost_amount, gross_profit, match_status, match_msg,
+               call_time, bill_id, usage_type, ref_usage_id, create_time, update_time
+        from crm_contract_usage
+        where bill_id is null and usage_type = 0
+          and call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
+          <if test="supplierId != null"> and supplier_id = #{supplierId}</if>
+          <if test="matchStatuses != null and matchStatuses.size() > 0">
+              and match_status in
+              <foreach collection="matchStatuses" item="matchStatus" open="(" separator="," close=")">
+                  #{matchStatus}
+              </foreach>
+          </if>
+          <if test="scopeSupplierIds != null and scopeSupplierIds.size() > 0">
+              and supplier_id in
+              <foreach collection="scopeSupplierIds" item="scopeSupplierId" open="(" separator="," close=")">
+                  #{scopeSupplierId}
+              </foreach>
+          </if>
+        order by call_time, id
+        limit 20000
+    </select>
+
+    <!-- 生效合同：已签约 + 调用时间落在合同有效期内（expire_time 为空视为长期有效） -->
+    <!-- 生效合同：合同只绑客户，渠道维度通过明细行过滤（明细含该渠道的模型才算该渠道的合同） -->
+    <select id="selectMatchContracts" resultType="com.ruoyi.crm.domain.CrmContract">
+        select c.id, c.bus_id, c.consumer_id, c.contact_no, c.contract_name,
+               c.status, c.expire_time, c.sign_time, c.create_time
+        from crm_contract c
+        where c.deleted = 0
+          and c.consumer_id = #{customerId}
+          and c.status = 2
+          and (c.sign_time is null or c.sign_time &lt;= #{callTime})
+          and (c.expire_time is null or c.expire_time &gt;= #{callTime})
+          and exists (select 1 from crm_contract_product cp
+                       where cp.contract_id = c.id and cp.deleted = 0
+                         and cp.supplier_id = #{supplierId})
+        order by c.sign_time desc, c.id desc
+    </select>
+
+    <!-- 同客户同渠道（有该渠道明细）的全部合同：用于区分「无合同」「已过期」 -->
+    <select id="selectRelatedContracts" resultType="com.ruoyi.crm.domain.CrmContract">
+        select c.id, c.consumer_id, c.contact_no, c.contract_name, c.status,
+               c.expire_time, c.sign_time, c.create_time
+        from crm_contract c
+        where c.deleted = 0
+          and c.consumer_id = #{customerId}
+          and exists (select 1 from crm_contract_product cp
+                       where cp.contract_id = c.id and cp.deleted = 0
+                         and cp.supplier_id = #{supplierId})
+        order by c.id desc
+    </select>
+
+    <!-- 生效合同明细候选：唯一性判定以「明细行」为粒度 -->
+    <!-- 同一客户 + 渠道 + 账户 + 模型在同一时间只允许一行；明细账户为空（历史未归属）按通配处理 -->
+    <select id="selectMatchContractProducts" resultType="com.ruoyi.crm.dto.CrmMatchProductDto">
+        select cp.id                  as contract_product_id,
+               c.id                   as contract_id,
+               c.contact_no           as contact_no,
+               cp.supplier_id         as supplier_id,
+               cp.supplier_account_id as supplier_account_id,
+               cp.sell_discount       as sell_discount,
+               cp.cost_discount       as cost_discount
+        from crm_contract c
+        inner join crm_contract_product cp on cp.contract_id = c.id and cp.deleted = 0
+        where c.deleted = 0
+          and c.status = 2
+          and c.consumer_id = #{customerId}
+          and (c.sign_time is null or c.sign_time &lt;= #{callTime})
+          and (c.expire_time is null or c.expire_time &gt;= #{callTime})
+          and cp.supplier_id = #{supplierId}
+          and cp.product_id = #{productId}
+          <if test="supplierAccountId != null and supplierAccountId > 0">
+              and (cp.supplier_account_id = #{supplierAccountId} or cp.supplier_account_id is null)
+          </if>
+        order by c.sign_time desc, c.id desc, cp.id
+    </select>
+
+    <!-- 模型编码匹配：product_code 为空的历史数据回退模型型号 no -->
+    <select id="selectModelProductsByCode" resultType="com.ruoyi.crm.domain.CrmModelProduct">
+        select id, name, no, product_code, type, source, price_detail, base_sell_price, base_cost_price,
+               status, deleted
+        from crm_model_product
+        where deleted = 0 and status = 1
+          and (product_code = #{productCode}
+               or ((product_code is null or product_code = '') and no = #{productCode}))
+        order by id
+    </select>
+
+    <select id="selectBillGroups" resultType="com.ruoyi.crm.dto.CrmBillGroupDto">
+        select contract_id,
+               customer_id,
+               supplier_id,
+               sum(total_tokens)        as total_tokens,
+               sum(sell_amount)         as total_sell_amount,
+               sum(cost_amount)         as total_cost_amount,
+               sum(gross_profit)        as total_gross_profit,
+               count(1)                 as usage_count
+        from crm_contract_usage
+        where match_status = 1
+          and bill_id is null
+          and contract_id is not null
+          and supplier_id = #{supplierId}
+          and call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
+        group by contract_id, customer_id, supplier_id
+        order by contract_id
+    </select>
+
+    <update id="updateBillIdByContract">
+        update crm_contract_usage
+        set bill_id = #{billId}, update_time = sysdate()
+        where bill_id is null
+          and match_status = 1
+          and contract_id = #{contractId}
+          and supplier_id = #{supplierId}
+          and call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
+    </update>
+
+    <select id="selectUsageByBillId" resultType="com.ruoyi.crm.dto.CrmContractUsageDto">
+        <include refid="selectUsageJoinColumns"/>
+        where a.bill_id = #{billId}
+        order by a.call_time, a.id
+    </select>
+
+    <!-- 渠道维度统计：调用次数与异常数含失败匹配，金额只统计匹配成功的用量 -->
+    <select id="selectSupplierStat" resultType="com.ruoyi.crm.dto.CrmSupplierStatVo">
+        select a.supplier_id,
+               s.name as supplier_name,
+               count(1) as total_calls,
+               sum(case when a.match_status = 1 then a.total_tokens else 0 end)    as total_tokens,
+               sum(case when a.match_status = 1 then a.sell_amount else 0 end)     as total_sell_amount,
+               sum(case when a.match_status = 1 then a.cost_amount else 0 end)     as total_cost_amount,
+               sum(case when a.match_status = 1 then a.gross_profit else 0 end)    as total_gross_profit,
+               count(distinct case when a.match_status = 1 then a.contract_id end) as contract_count,
+               sum(case when a.match_status &lt;&gt; 1 then 1 else 0 end)                as abnormal_count
+        from crm_contract_usage a
+        left join crm_supplier s on a.supplier_id = s.id
+        where a.call_time &gt;= #{startTime} and a.call_time &lt;= #{endTime}
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and a.supplier_id in
+            <foreach collection="supplierIds" item="supplierId" open="(" separator="," close=")">
+                #{supplierId}
+            </foreach>
+        </if>
+        group by a.supplier_id, s.name
+        order by total_sell_amount desc
+    </select>
+
+    <select id="selectContractRank" resultType="com.ruoyi.crm.dto.CrmContractRankVo">
+        select a.contract_id,
+               ct.contact_no,
+               ct.contract_name,
+               cu.name as customer_name,
+               s.name as supplier_name,
+               count(1) as total_calls,
+               sum(a.total_tokens)   as total_tokens,
+               sum(a.sell_amount)    as total_sell_amount,
+               sum(a.cost_amount)    as total_cost_amount,
+               sum(a.gross_profit)   as total_gross_profit
+        from crm_contract_usage a
+        left join crm_contract ct on a.contract_id = ct.id
+        left join crm_customer cu on a.customer_id = cu.id
+        left join crm_supplier s on a.supplier_id = s.id
+        where a.match_status = 1
+          and a.call_time &gt;= #{startTime} and a.call_time &lt;= #{endTime}
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and a.supplier_id in
+            <foreach collection="supplierIds" item="supplierId" open="(" separator="," close=")">
+                #{supplierId}
+            </foreach>
+        </if>
+        group by a.contract_id, ct.contact_no, ct.contract_name, cu.name, s.name
+        order by total_tokens desc
+        limit #{limit}
+    </select>
+
+    <select id="selectBoardSummary" resultType="com.ruoyi.crm.dto.CrmUsageBoardVo">
+        select count(1) as total_calls,
+               ifnull(sum(case when match_status = 1 then total_tokens else 0 end), 0)   as total_tokens,
+               ifnull(sum(case when match_status = 1 then sell_amount else 0 end), 0)    as total_sell_amount,
+               ifnull(sum(case when match_status = 1 then cost_amount else 0 end), 0)    as total_cost_amount,
+               ifnull(sum(case when match_status = 1 then gross_profit else 0 end), 0)   as total_gross_profit,
+               ifnull(sum(case when match_status &lt;&gt; 1 then 1 else 0 end), 0)             as abnormal_count
+        from crm_contract_usage
+        where call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and supplier_id in
+            <foreach collection="supplierIds" item="supplierId" open="(" separator="," close=")">
+                #{supplierId}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="selectSupplierIdsWithUsage" resultType="java.lang.Long">
+        select distinct supplier_id
+        from crm_contract_usage
+        where match_status = 1 and bill_id is null
+          and call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
+    </select>
+</mapper>

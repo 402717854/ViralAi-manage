@@ -1,81 +1,74 @@
 package com.ruoyi.crm.service;
 
 import java.util.List;
-import com.ruoyi.crm.domain.CrmBusiness;
-import com.ruoyi.crm.dto.CrmBusStatusOptionDto;
+
+import com.ruoyi.crm.dto.CrmBusinessDetailVo;
 import com.ruoyi.crm.dto.CrmBusinessDto;
+import com.ruoyi.crm.dto.CrmBusinessSettleVo;
 import com.ruoyi.crm.dto.CrmBusinessStatusVo;
 import com.ruoyi.crm.dto.CrmBusinessVo;
 
 /**
  * CRM 商机Service接口
- * 
+ *
  * @author ruoyi
- * @date 2026-10-28
+ * @date 2026-11-04
  */
-public interface ICrmBusinessService 
+public interface ICrmBusinessService
 {
     /**
-     * 查询CRM 商机
-     * 
-     * @param id CRM 商机主键
-     * @return CRM 商机
-     */
-    public CrmBusinessDto selectCrmBusinessById(Long id);
-
-    /**
-     * 查询CRM 商机列表
-     * 
-     * @param crmBusiness CRM 商机
-     * @return CRM 商机集合
-     */
-    public List<CrmBusinessDto> selectCrmBusinessList(CrmBusiness crmBusiness);
-
-    /**
-     * 新增CRM 商机
-     * 
-     * @param crmBusiness CRM 商机
-     * @return 结果
-     */
-    public int insertCrmBusiness(CrmBusinessVo crmBusiness);
-
-    /**
-     * 修改CRM 商机
-     * 
-     * @param crmBusiness CRM 商机
-     * @return 结果
-     */
-    public int updateCrmBusiness(CrmBusinessVo crmBusinessVo);
-
-    /**
-     * 批量删除CRM 商机
-     * 
-     * @param ids 需要删除的CRM 商机主键集合
-     * @return 结果
-     */
-    public int deleteCrmBusinessByIds(Long[] ids);
-
-    /**
-     * 删除CRM 商机信息
-     * 
-     * @param id CRM 商机主键
-     * @return 结果
-     */
-    public int deleteCrmBusinessById(Long id);
-
-    /**
-     * 商机状态流转
+     * 查询商机详情（主信息 + 意向产品 + 关联合同 + 操作日志 + 可执行动作）
      *
-     * @param statusVo 状态流转请求（商机编号、目标状态、中断备注、成交日期）
+     * @param id 商机主键
+     * @return 详情
+     */
+    public CrmBusinessDetailVo selectCrmBusinessById(Long id);
+
+    /**
+     * 查询商机列表
+     *
+     * @param query 查询条件（含数据权限）
+     * @return 商机集合
+     */
+    public List<CrmBusinessDto> selectCrmBusinessList(CrmBusinessDto query);
+
+    /**
+     * 保存商机（id 为空新增，非空编辑）
+     *
+     * @param vo 商机入参
+     * @return 商机ID
+     */
+    public Long saveCrmBusiness(CrmBusinessVo vo);
+
+    /**
+     * 商机状态流转（严格按状态机白名单校验）
+     *
+     * @param statusVo 状态流转请求
      * @return 结果
      */
     public int changeBusStatus(CrmBusinessStatusVo statusVo);
 
     /**
-     * 查询商机当前状态下允许流转到的目标状态
+     * 回填结算状态
      *
-     * @param id 商机主键
-     * @return 目标状态选项集合
+     * @param settleVo 结算请求
+     * @return 结果
      */
-    public List<CrmBusStatusOptionDto> selectAllowedNextStatus(Long id);
+    public int updateSettleStatus(CrmBusinessSettleVo settleVo);
+
+    /**
+     * 商机转合同：成交商机复制意向清单生成草稿合同
+     *
+     * @param busId 商机主键
+     * @return 新建合同ID
+     */
+    public Long convertContract(Long busId);
+
+    /**
+     * 批量删除商机（仅初始化/跟进中）
+     *
+     * @param ids 商机主键集合
+     * @return 结果
+     */
+    public int deleteCrmBusinessByIds(Long[] ids);
 }

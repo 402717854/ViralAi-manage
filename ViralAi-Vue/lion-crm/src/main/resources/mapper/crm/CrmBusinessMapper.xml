@@ -3,62 +3,123 @@
 PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ruoyi.crm.mapper.CrmBusinessMapper">
-    
+
     <resultMap type="CrmBusiness" id="CrmBusinessResult">
-        <result property="id"    column="id"    />
-        <result property="name"    column="name"    />
-        <result property="customerId"    column="customer_id"    />
-        <result property="supplierId"    column="supplier_id"    />
-        <result property="ownerUser"    column="owner_user"    />
-        <result property="busStatus"    column="bus_status"    />
-        <result property="dealTime"    column="deal_time"    />
-        <result property="contactStatus"    column="contact_status"    />
-        <result property="settleStatus"    column="settle_status"    />
-        <result property="contactAmount"    column="contact_amount"    />
-        <result property="creditAmount"    column="credit_amount"    />
-        <result property="remark"    column="remark"    />
-        <result property="failRemark"    column="fail_remark"    />
-        <result property="creator"    column="creator"    />
-        <result property="updater"    column="updater"    />
-        <result property="createTime"    column="create_time"    />
-        <result property="updateTime"    column="update_time"    />
-        <result property="deleted"    column="deleted"    />
+        <result property="id"             column="id"             />
+        <result property="name"           column="name"           />
+        <result property="customerId"     column="customer_id"    />
+        <result property="ownerUser"      column="owner_user"     />
+        <result property="busStatus"      column="bus_status"     />
+        <result property="dealTime"       column="deal_time"      />
+        <result property="contactStatus"  column="contact_status" />
+        <result property="settleStatus"   column="settle_status"  />
+        <result property="contactAmount"  column="contact_amount" />
+        <result property="creditAmount"   column="credit_amount"  />
+        <result property="remark"         column="remark"         />
+        <result property="failRemark"     column="fail_remark"    />
+        <result property="creator"        column="creator"        />
+        <result property="updater"        column="updater"        />
+        <result property="createTime"     column="create_time"    />
+        <result property="updateTime"     column="update_time"    />
+        <result property="deleted"        column="deleted"        />
     </resultMap>
 
     <sql id="selectCrmBusinessVo">
-        select id, name, customer_id, supplier_id, owner_user, bus_status, deal_time, contact_status, settle_status, contact_amount, credit_amount, remark, fail_remark, creator, updater, create_time, update_time, deleted from crm_business
+        select id, name, customer_id, owner_user, bus_status, deal_time, contact_status,
+               settle_status, contact_amount, credit_amount, remark, fail_remark, creator, updater,
+               create_time, update_time, deleted
+        from crm_business
     </sql>
 
-    <select id="selectCrmBusinessList" parameterType="CrmBusiness" resultType="com.ruoyi.crm.dto.CrmBusinessDto">
-        select a.id, a.name, b.name as customer, d.name as supplier, a.owner_user, a.bus_status, a.deal_time,
-               a.contact_status, a.settle_status,a.contact_amount, a.credit_amount, a.remark, a.fail_remark,
-               e.user_name as creator, c.user_name as updater, a.create_time, a.update_time, a.deleted
-               from crm_business a
-               left join crm_customer b on a.customer_id=b.id
-               left join sys_user c on a.updater=c.user_id
-               left join crm_supplier d on a.supplier_id=d.id
-               left join sys_user e on a.creator=e.user_id
-        <where>
-            a.deleted =0
-            <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>
-            <if test="customerId != null "> and a.customer_id = #{customerId}</if>
-            <if test="supplierId != null "> and a.supplier_id = #{supplierId}</if>
-            <if test="ownerUser != null  and ownerUser != ''"> and a.owner_user = #{ownerUser}</if>
-            <if test="busStatus != null "> and a.bus_status = #{busStatus}</if>
-            <if test="dealTime != null "> and a.deal_time = #{dealTime}</if>
-            <if test="contactStatus != null "> and a.contact_status = #{contactStatus}</if>
-            <if test="settleStatus != null "> and a.settle_status = #{settleStatus}</if>
-            <if test="contactAmount != null "> and a.contact_amount = #{contactAmount}</if>
-            <if test="creditAmount != null "> and a.credit_amount = #{creditAmount}</if>
-            <if test="failRemark != null  and failRemark != ''"> and a.fail_remark = #{failRemark}</if>
-            <if test="creator != null "> and a.creator = #{creator}</if>
-            <if test="updater != null "> and a.updater = #{updater}</if>
-        </where>
-    </select>
-    
+    <!-- 列表公共查询列：客户/明细渠道/操作人名称 + 合同标记 + 产品条数
+         渠道不再是商机属性，改为按明细行聚合展示（一个商机可涉及多个渠道） -->
+    <sql id="selectBusinessListColumns">
+        select a.id, a.name, a.customer_id, b.name as customer,
+               (select group_concat(distinct s.name order by s.name separator '、')
+                  from crm_business_product p2
+                  inner join crm_supplier s on p2.supplier_id = s.id
+                 where p2.bus_id = a.id) as supplier,
+               a.owner_user, a.bus_status, a.deal_time, a.contact_status, a.settle_status,
+               a.contact_amount, a.credit_amount, a.remark, a.fail_remark,
+               a.creator as creator_id, e.user_name as creator, a.updater as updater_id, c.user_name as updater,
+               a.create_time, a.update_time, a.deleted,
+               (select count(1) from crm_business_product p where p.bus_id = a.id) as product_count,
+               (select c2.id from crm_contract c2 where c2.bus_id = a.id and c2.deleted = 0
+                 order by c2.id desc limit 1) as contract_id,
+               (select c3.contact_no from crm_contract c3 where c3.bus_id = a.id and c3.deleted = 0
+                 order by c3.id desc limit 1) as contract_no,
+               case when exists (select 1 from crm_contract c4 where c4.bus_id = a.id and c4.deleted = 0)
+                    then 1 else 0 end as has_contract
+        from crm_business a
+        left join crm_customer b on a.customer_id = b.id
+        left join sys_user c on a.updater = c.user_id
+        left join sys_user e on a.creator = e.user_id
+    </sql>
+
     <select id="selectCrmBusinessById" parameterType="Long" resultMap="CrmBusinessResult">
         <include refid="selectCrmBusinessVo"/>
-        where id = #{id}
+        where id = #{id} and deleted = 0
+    </select>
+
+    <!-- 转合同前置：锁行，避免同一商机并发生成多份合同 -->
+    <select id="selectCrmBusinessByIdForUpdate" parameterType="Long" resultMap="CrmBusinessResult">
+        <include refid="selectCrmBusinessVo"/>
+        where id = #{id} and deleted = 0
+        for update
+    </select>
+
+    <select id="selectCrmBusinessDetail" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmBusinessDetailVo">
+        <include refid="selectBusinessListColumns"/>
+        where a.id = #{id} and a.deleted = 0
+    </select>
+
+    <select id="selectCrmBusinessList" parameterType="com.ruoyi.crm.dto.CrmBusinessDto"
+            resultType="com.ruoyi.crm.dto.CrmBusinessDto">
+        <include refid="selectBusinessListColumns"/>
+        <where>
+            a.deleted = 0
+            <if test="name != null and name != ''"> and a.name like concat('%', #{name}, '%')</if>
+            <if test="customerId != null"> and a.customer_id = #{customerId}</if>
+            <!-- 渠道筛选：按明细行渠道匹配（一个商机可涉及多个渠道） -->
+            <if test="supplierId != null">
+                and exists (select 1 from crm_business_product bp
+                             where bp.bus_id = a.id and bp.supplier_id = #{supplierId})
+            </if>
+            <if test="ownerUser != null and ownerUser != ''"> and a.owner_user like concat('%', #{ownerUser}, '%')</if>
+            <if test="busStatus != null"> and a.bus_status = #{busStatus}</if>
+            <!-- 状态多选：前端以逗号分隔字符串传参，与合同列表保持一致 -->
+            <if test="params.statusList != null and params.statusList != ''">
+                and find_in_set(a.bus_status, #{params.statusList})
+            </if>
+            <if test="contactStatus != null"> and a.contact_status = #{contactStatus}</if>
+            <if test="settleStatus != null"> and a.settle_status = #{settleStatus}</if>
+            <!-- 成交时间区间 -->
+            <if test="params.beginDealTime != null and params.beginDealTime != ''">
+                and a.deal_time &gt;= #{params.beginDealTime}
+            </if>
+            <if test="params.endDealTime != null and params.endDealTime != ''">
+                and a.deal_time &lt;= concat(#{params.endDealTime}, ' 23:59:59')
+            </if>
+            <!-- 创建时间区间（兼容列表默认时间筛选） -->
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+            <!-- 数据权限：客户负责人按客户过滤（商机不再有独立渠道归属） -->
+            <if test="params.scopeCustomerIds != null and params.scopeCustomerIds.size() > 0">
+                and a.customer_id in
+                <foreach collection="params.scopeCustomerIds" item="scopeCustomerId" open="(" separator="," close=")">
+                    #{scopeCustomerId}
+                </foreach>
+            </if>
+            <!-- 数据权限：销售/客户账号按创建人过滤 -->
+            <if test="params.scopeCreator != null">
+                and a.creator = #{params.scopeCreator}
+            </if>
+        </where>
+        order by a.id desc
     </select>
 
     <insert id="insertCrmBusiness" parameterType="CrmBusiness" useGeneratedKeys="true" keyProperty="id">
@@ -66,7 +127,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="name != null and name != ''">name,</if>
             <if test="customerId != null">customer_id,</if>
-            <if test="supplierId != null">supplier_id,</if>
             <if test="ownerUser != null">owner_user,</if>
             <if test="busStatus != null">bus_status,</if>
             <if test="dealTime != null">deal_time,</if>
@@ -81,11 +141,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="createTime != null">create_time,</if>
             <if test="updateTime != null">update_time,</if>
             <if test="deleted != null">deleted,</if>
-         </trim>
+        </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="name != null and name != ''">#{name},</if>
             <if test="customerId != null">#{customerId},</if>
-            <if test="supplierId != null">#{supplierId},</if>
             <if test="ownerUser != null">#{ownerUser},</if>
             <if test="busStatus != null">#{busStatus},</if>
             <if test="dealTime != null">#{dealTime},</if>
@@ -100,31 +159,23 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="createTime != null">#{createTime},</if>
             <if test="updateTime != null">#{updateTime},</if>
             <if test="deleted != null">#{deleted},</if>
-         </trim>
+        </trim>
     </insert>
 
+    <!-- 仅更新可编辑字段：状态、合同/结算标记均不在此接口开放 -->
     <update id="updateCrmBusiness" parameterType="CrmBusiness">
         update crm_business
         <trim prefix="SET" suffixOverrides=",">
             <if test="name != null and name != ''">name = #{name},</if>
             <if test="customerId != null">customer_id = #{customerId},</if>
-            <if test="supplierId != null">supplier_id = #{supplierId},</if>
-            <if test="ownerUser != null">owner_user = #{ownerUser},</if>
-            <if test="busStatus != null">bus_status = #{busStatus},</if>
-            <if test="dealTime != null">deal_time = #{dealTime},</if>
-            <if test="contactStatus != null">contact_status = #{contactStatus},</if>
-            <if test="settleStatus != null">settle_status = #{settleStatus},</if>
+            <if test="ownerUser != null and ownerUser != ''">owner_user = #{ownerUser},</if>
             <if test="contactAmount != null">contact_amount = #{contactAmount},</if>
             <if test="creditAmount != null">credit_amount = #{creditAmount},</if>
             <if test="remark != null">remark = #{remark},</if>
-            <if test="failRemark != null">fail_remark = #{failRemark},</if>
-            <if test="creator != null">creator = #{creator},</if>
             <if test="updater != null">updater = #{updater},</if>
-            <if test="createTime != null">create_time = #{createTime},</if>
             <if test="updateTime != null">update_time = #{updateTime},</if>
-            <if test="deleted != null">deleted = #{deleted},</if>
         </trim>
-        where id = #{id}
+        where id = #{id} and deleted = 0
     </update>
 
     <update id="updateBusStatus">
@@ -140,14 +191,42 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and deleted = 0
     </update>
 
-    <delete id="deleteCrmBusinessById" parameterType="Long">
-        update crm_business set deleted = 1 where id = #{id}
-    </delete>
+    <update id="updateSettleStatus">
+        update crm_business
+        set settle_status = #{settleStatus},
+            updater = #{updater},
+            update_time = sysdate()
+        where id = #{id} and deleted = 0
+    </update>
 
-    <delete id="deleteCrmBusinessByIds" parameterType="String">
-        update crm_business set deleted = 1 where id in
+    <update id="updateContactStatus">
+        update crm_business
+        set contact_status = #{contactStatus},
+            update_time = sysdate()
+        where id = #{busId} and deleted = 0
+    </update>
+
+    <update id="deleteCrmBusinessByIds" parameterType="String">
+        update crm_business set deleted = 1, update_time = sysdate() where id in
         <foreach item="id" collection="array" open="(" separator="," close=")">
             #{id}
         </foreach>
-    </delete>
+    </update>
+
+    <!-- 数据权限：当前账号作为负责人所服务的客户ID集合 -->
+    <select id="selectOwnedCustomerIds" parameterType="String" resultType="java.lang.Long">
+        select id from crm_customer where deleted = 0 and owner_user = #{ownerUser}
+    </select>
+
+    <select id="selectContractsByBusId" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmBusinessContractVo">
+        select id, contact_no, contract_name, status, sign_time, expire_time, create_time
+        from crm_contract
+        where bus_id = #{busId} and deleted = 0
+        order by id desc
+    </select>
+
+    <select id="countContractsByBusId" parameterType="Long" resultType="int">
+        select count(1) from crm_contract where bus_id = #{busId} and deleted = 0
+    </select>
+
 </mapper>

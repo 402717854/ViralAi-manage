@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmBusinessLogMapper">
+
+    <resultMap type="CrmBusinessLog" id="CrmBusinessLogResult">
+        <result property="id"           column="id"            />
+        <result property="busId"        column="bus_id"        />
+        <result property="action"       column="action"        />
+        <result property="actionName"   column="action_name"   />
+        <result property="fromStatus"   column="from_status"   />
+        <result property="toStatus"     column="to_status"     />
+        <result property="content"      column="content"       />
+        <result property="operatorId"   column="operator_id"   />
+        <result property="operatorName" column="operator_name" />
+        <result property="createTime"   column="create_time"   />
+    </resultMap>
+
+    <select id="selectCrmBusinessLogList" parameterType="Long" resultMap="CrmBusinessLogResult">
+        select id, bus_id, action, action_name, from_status, to_status, content, operator_id, operator_name, create_time
+        from crm_business_log
+        where bus_id = #{busId}
+        order by id desc
+    </select>
+
+    <insert id="insertCrmBusinessLog" parameterType="CrmBusinessLog" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_business_log
+            (bus_id, action, action_name, from_status, to_status, content, operator_id, operator_name, create_time)
+        values
+            (#{busId}, #{action}, #{actionName}, #{fromStatus}, #{toStatus}, #{content},
+             #{operatorId}, #{operatorName}, #{createTime})
+    </insert>
+
+</mapper>

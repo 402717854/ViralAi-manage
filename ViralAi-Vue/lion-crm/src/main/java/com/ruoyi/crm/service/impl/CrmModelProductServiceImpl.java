@@ -57,6 +57,22 @@ public class CrmModelProductServiceImpl implements ICrmModelProductService
     }
 
     /**
+     * 查询指定渠道下已关联且启用的模型产品
+     *
+     * @param supplierId 渠道ID
+     * @return 模型产品集合
+     */
+    @Override
+    public List<CrmModelProductDto> selectProductsBySupplier(Long supplierId)
+    {
+        if (supplierId == null)
+        {
+            throw new ServiceException("渠道ID不能为空");
+        }
+        return crmModelProductMapper.selectProductsBySupplier(supplierId);
+    }
+
+    /**
      * 新增CRM模型产品
      * 
      * @param crmModelProduct CRM模型产品

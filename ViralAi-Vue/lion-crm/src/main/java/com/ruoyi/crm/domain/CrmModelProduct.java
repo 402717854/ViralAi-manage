@@ -4,6 +4,8 @@ import lombok.Getter;
 import lombok.Setter;
 import com.ruoyi.common.core.domain.BaseEntity;
 
+import java.math.BigDecimal;
+
 /**
  * CRM模型产品对象 crm_model_product
  * 
@@ -25,6 +27,9 @@ public class CrmModelProduct extends BaseEntity
     /** 模型型号 */
     private String no;
 
+    /** 模型编码（对账匹配键，网关 product_code 需与之对应），为空时回退 no */
+    private String productCode;
+
     /** 模型类型1文本2多模态3图片处理4音频处理5视频处理 */
     private Integer type;
 
@@ -33,6 +38,12 @@ public class CrmModelProduct extends BaseEntity
 
     /** 价格明细 */
     private String priceDetail;
+
+    /** 基准售价（每千token），对账计费基数 */
+    private BigDecimal baseSellPrice;
+
+    /** 基准成本价（每千token），对账计费基数 */
+    private BigDecimal baseCostPrice;
 
     /** 状态0失效1有效 */
     private Integer status;

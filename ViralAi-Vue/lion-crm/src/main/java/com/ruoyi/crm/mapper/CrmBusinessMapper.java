@@ -3,75 +3,78 @@ package com.ruoyi.crm.mapper;
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
+
 import org.apache.ibatis.annotations.Param;
 import com.ruoyi.crm.domain.CrmBusiness;
+import com.ruoyi.crm.dto.CrmBusinessContractVo;
+import com.ruoyi.crm.dto.CrmBusinessDetailVo;
 import com.ruoyi.crm.dto.CrmBusinessDto;
 
 /**
  * CRM 商机Mapper接口
- * 
+ *
  * @author ruoyi
- * @date 2026-10-28
+ * @date 2026-11-04
  */
-public interface CrmBusinessMapper 
+public interface CrmBusinessMapper
 {
     /**
-     * 查询CRM 商机
-     * 
-     * @param id CRM 商机主键
-     * @return CRM 商机
+     * 查询商机（主表原始字段）
+     *
+     * @param id 商机主键
+     * @return 商机
      */
     public CrmBusiness selectCrmBusinessById(Long id);
 
     /**
-     * 查询CRM 商机列表
-     * 
-     * @param crmBusiness CRM 商机
-     * @return CRM 商机集合
+     * 查询商机并加行锁，用于转合同等需要防并发重复提交的场景
+     *
+     * @param id 商机主键
+     * @return 商机
      */
-    public List<CrmBusinessDto> selectCrmBusinessList(CrmBusiness crmBusiness);
+    public CrmBusiness selectCrmBusinessByIdForUpdate(Long id);
 
     /**
-     * 新增CRM 商机
-     * 
-     * @param crmBusiness CRM 商机
+     * 查询商机详情（含客户名称、渠道名称、操作人名称、合同标记）
+     *
+     * @param id 商机主键
+     * @return 详情
+     */
+    public CrmBusinessDetailVo selectCrmBusinessDetail(Long id);
+
+    /**
+     * 查询商机列表
+     *
+     * @param query 查询条件（含 params 内的数据权限与成交时间区间）
+     * @return 商机集合
+     */
+    public List<CrmBusinessDto> selectCrmBusinessList(CrmBusinessDto query);
+
+    /**
+     * 新增商机
+     *
+     * @param crmBusiness 商机
      * @return 结果
      */
     public int insertCrmBusiness(CrmBusiness crmBusiness);
 
     /**
-     * 修改CRM 商机
-     * 
-     * @param crmBusiness CRM 商机
+     * 修改商机基础信息（仅白名单字段）
+     *
+     * @param crmBusiness 商机
      * @return 结果
      */
     public int updateCrmBusiness(CrmBusiness crmBusiness);
 
     /**
-     * 删除CRM 商机
-     * 
-     * @param id CRM 商机主键
-     * @return 结果
-     */
-    public int deleteCrmBusinessById(Long id);
-
-    /**
-     * 批量删除CRM 商机
-     * 
-     * @param ids 需要删除的数据主键集合
-     * @return 结果
-     */
-    public int deleteCrmBusinessByIds(Long[] ids);
-
-    /**
-     * 更新商机状态（仅更新状态相关字段，以当前状态为条件做并发保护）
+     * 更新商机状态（以当前状态为条件做并发保护）
      *
      * @param id 商机主键
-     * @param oldStatus 流转前的状态，用于乐观并发校验
+     * @param oldStatus 流转前状态
      * @param busStatus 目标状态
-     * @param failRemark 中断备注，传 null 表示清空
-     * @param dealTime 成交日期，传 null 表示保持不变
-     * @param creditAmount 授信金额，传 null 表示保持不变
+     * @param failRemark 中断备注，非中断流转时置空
+     * @param dealTime 成交时间，null 表示保持不变
+     * @param creditAmount 授信额度，null 表示保持不变
      * @param updater 更新人
      * @return 影响行数，0 表示状态已被其他操作变更
      */
@@ -82,4 +85,58 @@ public interface CrmBusinessMapper
                                @Param("dealTime") Date dealTime,
                                @Param("creditAmount") BigDecimal creditAmount,
                                @Param("updater") Long updater);
+
+    /**
+     * 回填结算状态
+     *
+     * @param id 商机主键
+     * @param settleStatus 结算状态 0未结算 1已结算
+     * @param updater 更新人
+     * @return 结果
+     */
+    public int updateSettleStatus(@Param("id") Long id,
+                                  @Param("settleStatus") Integer settleStatus,
+                                  @Param("updater") Long updater);
+
+    /**
+     * 回写合同签署状态（合同审批通过/作废时由合同模块调用）
+     *
+     * @param busId 商机主键
+     * @param contactStatus 合同状态 0未签 1已签
+     * @return 结果
+     */
+    public int updateContactStatus(@Param("busId") Long busId,
+                                   @Param("contactStatus") Integer contactStatus);
+
+    /**
+     * 逻辑删除商机
+     *
+     * @param ids 需要删除的商机主键集合
+     * @return 结果
+     */
+    public int deleteCrmBusinessByIds(Long[] ids);
+
+    /**
+     * 查询指定账号负责的客户ID集合（数据权限：客户负责人）
+     *
+     * @param ownerUser 登录账号
+     * @return 客户ID集合
+     */
+    public List<Long> selectOwnedCustomerIds(@Param("ownerUser") String ownerUser);
+
+    /**
+     * 查询商机关联的合同列表
+     *
+     * @param busId 商机主键
+     * @return 合同集合
+     */
+    public List<CrmBusinessContractVo> selectContractsByBusId(@Param("busId") Long busId);
+
+    /**
+     * 统计商机已生成的合同数量（不含已删除），用于转合同幂等校验
+     *
+     * @param busId 商机主键
+     * @return 合同数量
+     */
+    public int countContractsByBusId(@Param("busId") Long busId);
 }

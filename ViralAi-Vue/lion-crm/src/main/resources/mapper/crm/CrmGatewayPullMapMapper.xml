@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmGatewayPullMapMapper">
+
+    <resultMap type="CrmGatewayPullMap" id="CrmGatewayPullMapResult">
+        <result property="id"                column="id"                  />
+        <result property="supplierId"        column="supplier_id"         />
+        <result property="supplierAccountId" column="supplier_account_id" />
+        <result property="mapType"           column="map_type"            />
+        <result property="upstreamKey"       column="upstream_key"        />
+        <result property="upstreamVariant"   column="upstream_variant"    />
+        <result property="targetId"          column="target_id"           />
+        <result property="targetCode"        column="target_code"         />
+        <result property="status"            column="status"              />
+        <result property="remark"            column="remark"              />
+        <result property="creator"           column="creator"             />
+        <result property="createTime"        column="create_time"         />
+        <result property="updateTime"        column="update_time"         />
+    </resultMap>
+
+    <sql id="selectCrmGatewayPullMapVo">
+        select id, supplier_id, supplier_account_id, map_type, upstream_key, upstream_variant,
+               target_id, target_code, status, remark, creator, create_time, update_time
+        from crm_gateway_pull_map
+    </sql>
+
+    <!--
+      拉取时批量载入规则：只取有效规则，且限定在本次涉及的渠道/账户范围内。
+      supplier_account_id = 0 表示渠道级通用规则，也必须带出来。
+    -->
+    <select id="selectEffectiveMaps" resultMap="CrmGatewayPullMapResult">
+        <include refid="selectCrmGatewayPullMapVo"/>
+        where status = 1
+        <if test="mapType != null and mapType != ''">
+            and map_type = #{mapType}
+        </if>
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and supplier_id in
+            <foreach collection="supplierIds" item="sid" open="(" separator="," close=")">#{sid}</foreach>
+        </if>
+        <if test="accountIds != null and accountIds.size() > 0">
+            and (supplier_account_id = 0 or supplier_account_id in
+            <foreach collection="accountIds" item="aid" open="(" separator="," close=")">#{aid}</foreach>
+            )
+        </if>
+        order by supplier_account_id desc
+    </select>
+
+    <select id="selectCrmGatewayPullMapById" parameterType="Long" resultMap="CrmGatewayPullMapResult">
+        <include refid="selectCrmGatewayPullMapVo"/>
+        where id = #{id}
+    </select>
+
+    <!-- 维护界面列表：附带渠道名、账户名与目标名称，便于直接核对映射是否指向正确对象 -->
+    <select id="selectCrmGatewayPullMapList" parameterType="CrmGatewayPullMap"
+            resultType="com.ruoyi.crm.dto.CrmGatewayPullMapDto">
+        select m.id, m.supplier_id, s.name as supplier_name,
+               m.supplier_account_id, a.account_name,
+               m.map_type, m.upstream_key, m.upstream_variant,
+               m.target_id, cu.name as customer_name,
+               m.target_code, mp.name as model_name, mp.no as model_no,
+               m.status, m.remark, m.creator, m.create_time, m.update_time
+        from crm_gateway_pull_map m
+        left join crm_supplier s on m.supplier_id = s.id
+        left join crm_supplier_account a on m.supplier_account_id = a.id
+        left join crm_customer cu on m.target_id = cu.id
+        left join crm_model_product mp on m.target_code = mp.product_code and mp.deleted = 0
+        <where>
+            <if test="supplierId != null">and m.supplier_id = #{supplierId}</if>
+            <if test="supplierAccountId != null">and m.supplier_account_id = #{supplierAccountId}</if>
+            <if test="mapType != null and mapType != ''">and m.map_type = #{mapType}</if>
+            <if test="upstreamKey != null and upstreamKey != ''">
+                and m.upstream_key like concat('%', #{upstreamKey}, '%')
+            </if>
+            <if test="status != null">and m.status = #{status}</if>
+        </where>
+        order by m.supplier_id, m.map_type, m.supplier_account_id, m.id
+    </select>
+
+    <insert id="insertCrmGatewayPullMap" parameterType="CrmGatewayPullMap" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_gateway_pull_map (
+            supplier_id, supplier_account_id, map_type, upstream_key, upstream_variant,
+            target_id, target_code, status, remark, creator, create_time
+        ) values (
+            #{supplierId}, ifnull(#{supplierAccountId}, 0), #{mapType},
+            ifnull(#{upstreamKey}, ''), ifnull(#{upstreamVariant}, ''),
+            #{targetId}, #{targetCode}, ifnull(#{status}, 1), #{remark},
+            #{creator}, ifnull(#{createTime}, sysdate())
+        )
+    </insert>
+
+    <update id="updateCrmGatewayPullMap" parameterType="CrmGatewayPullMap">
+        update crm_gateway_pull_map
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="supplierId != null">supplier_id = #{supplierId},</if>
+            <if test="supplierAccountId != null">supplier_account_id = #{supplierAccountId},</if>
+            <if test="mapType != null">map_type = #{mapType},</if>
+            <if test="upstreamKey != null">upstream_key = #{upstreamKey},</if>
+            <if test="upstreamVariant != null">upstream_variant = #{upstreamVariant},</if>
+            <if test="targetId != null">target_id = #{targetId},</if>
+            <if test="targetCode != null">target_code = #{targetCode},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            update_time = sysdate(),
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteCrmGatewayPullMapById" parameterType="Long">
+        delete from crm_gateway_pull_map where id = #{id}
+    </delete>
+
+    <select id="countDuplicate" resultType="java.lang.Integer">
+        select count(1) from crm_gateway_pull_map
+        where supplier_id = #{map.supplierId}
+          and supplier_account_id = ifnull(#{map.supplierAccountId}, 0)
+          and map_type = #{map.mapType}
+          and upstream_key = ifnull(#{map.upstreamKey}, '')
+          and upstream_variant = ifnull(#{map.upstreamVariant}, '')
+        <if test="excludeId != null">
+            and id != #{excludeId}
+        </if>
+    </select>
+
+</mapper>

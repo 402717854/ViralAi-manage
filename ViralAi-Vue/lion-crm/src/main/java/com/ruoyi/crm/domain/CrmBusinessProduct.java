@@ -30,6 +30,9 @@ public class CrmBusinessProduct extends BaseEntity
     /** 渠道编号 */
     private Long supplierId;
 
+    /** 渠道账户编号（crm_supplier_account.id），必填，标识该行使用的具体账户 */
+    private Long supplierAccountId;
+
     /** 模型产品编号 */
     private Long productId;
 

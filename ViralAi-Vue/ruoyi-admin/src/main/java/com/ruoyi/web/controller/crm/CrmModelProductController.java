@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -123,5 +124,21 @@ public class CrmModelProductController extends BaseController
         crmModelProduct.setStatus(1);
         List<CrmModelProductDto> list = crmModelProductService.selectCrmModelProductList(crmModelProduct);
         return success(list);
+    }
+
+    /**
+     * 查询指定渠道下已关联且启用的模型产品
+     * <p>
+     * 合同明细新增下拉的唯一数据源：只返回该渠道上架的模型，前端不得使用全量模型接口，
+     * 后端在明细保存时同样按该数据源做归属校验。
+     *
+     * @param supplierId 渠道ID
+     * @return 该渠道可用模型集合
+     */
+    @PreAuthorize("@ss.hasAnyPermi('crm:contract:add,crm:contract:edit,crm:contract:query')")
+    @GetMapping("/list-by-supplier")
+    public AjaxResult listBySupplier(@RequestParam("supplierId") Long supplierId)
+    {
+        return success(crmModelProductService.selectProductsBySupplier(supplierId));
     }
 }

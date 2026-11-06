@@ -1,5 +1,7 @@
 package com.ruoyi.crm.dto;
 
+import java.math.BigDecimal;
+
 import com.ruoyi.common.annotation.Excel;
 import com.ruoyi.common.core.domain.BaseEntity;
 import lombok.Getter;
@@ -28,6 +30,10 @@ public class CrmModelProductDto extends BaseEntity
     @Excel(name = "模型型号")
     private String no;
 
+    /** 模型编码（对账匹配键） */
+    @Excel(name = "模型编码")
+    private String productCode;
+
     /** 模型类型1文本2多模态3图片处理4音频处理5视频处理 */
     @Excel(name = "模型类型", readConverterExp = "1=文本,2=多模态,3=图片处理,4=音频处理,5=视频处理")
     private Integer type;
@@ -39,6 +45,14 @@ public class CrmModelProductDto extends BaseEntity
     /** 价格明细 */
     @Excel(name = "价格明细")
     private String priceDetail;
+
+    /** 基准售价（每千token） */
+    @Excel(name = "基准售价(每千token)", scale = 6)
+    private BigDecimal baseSellPrice;
+
+    /** 基准成本价（每千token） */
+    @Excel(name = "基准成本价(每千token)", scale = 6)
+    private BigDecimal baseCostPrice;
 
     /** 状态0失效1有效 */
     @Excel(name = "状态", readConverterExp = "0=失效,1=有效")
@@ -55,5 +69,26 @@ public class CrmModelProductDto extends BaseEntity
     /** 更新者（用户名称） */
     @Excel(name = "更新者")
     private String updater;
+
+    /** 渠道成本折扣下限（渠道-模型关联配置，按渠道查询时回显） */
+    private BigDecimal minCostDiscount;
+
+    /** 渠道成本折扣上限 */
+    private BigDecimal maxCostDiscount;
+
+    /** 渠道售价折扣下限 */
+    private BigDecimal minSellDiscount;
+
+    /** 渠道售价折扣上限 */
+    private BigDecimal maxSellDiscount;
+
+    /** 渠道代理折扣下限 */
+    private BigDecimal minAgentDiscount;
+
+    /** 渠道代理折扣上限 */
+    private BigDecimal maxAgentDiscount;
+
+    /** 预计日消耗金额 */
+    private BigDecimal dailyUsageAmount;
 
 }

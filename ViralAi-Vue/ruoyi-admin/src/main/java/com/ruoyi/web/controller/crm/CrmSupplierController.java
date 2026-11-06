@@ -100,6 +100,19 @@ public class CrmSupplierController extends BaseController
     }
 
     /**
+     * 按供应商ID查询其渠道账户列表
+     * <p>
+     * 供供应商详情页展示账户信息。apiKey 为脱敏值（不返回完整密钥），
+     * 账户密码不返回；完整密钥请在「渠道账户管理」中查看。
+     */
+    @PreAuthorize("@ss.hasPermi('crm:supplier:query')")
+    @GetMapping(value = "/{id}/accounts")
+    public AjaxResult getAccounts(@PathVariable("id") Long id)
+    {
+        return success(crmSupplierService.selectAccountListBySupplierId(id));
+    }
+
+    /**
      * 新增CRM 供应商
      * <p>
      * 请求体在供应商主表字段之外支持 projects 列表，用于一次性提交供应商产品关联信息（一对多）。

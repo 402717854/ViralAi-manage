@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmContractMapper">
+
+    <resultMap type="CrmContract" id="CrmContractResult">
+        <result property="id"    column="id"    />
+        <result property="busId"    column="bus_id"    />
+        <result property="consumerId"    column="consumer_id"    />
+        <result property="contactNo"    column="contact_no"    />
+        <result property="contractName"    column="contract_name"    />
+        <result property="status"    column="status"    />
+        <result property="contractEntity"    column="contract_entity"    />
+        <result property="expireTime"    column="expire_time"    />
+        <result property="auditTime"    column="audit_time"    />
+        <result property="signTime"    column="sign_time"    />
+        <result property="cancelTime"    column="cancel_time"    />
+        <result property="archiveTime"    column="archive_time"    />
+        <result property="auditOpinion"    column="audit_opinion"    />
+        <result property="cancelReason"    column="cancel_reason"    />
+        <result property="remark"    column="remark"    />
+        <result property="creator"    column="creator"    />
+        <result property="createTime"    column="create_time"    />
+        <result property="updater"    column="updater"    />
+        <result property="updateTime"    column="update_time"    />
+        <result property="deleted"    column="deleted"    />
+    </resultMap>
+
+    <sql id="selectCrmContractVo">
+        select id, bus_id, consumer_id, contact_no, contract_name, status, contract_entity,
+               expire_time, audit_time, sign_time, cancel_time, archive_time, audit_opinion, cancel_reason,
+               remark, creator, create_time, updater, update_time, deleted
+        from crm_contract
+    </sql>
+
+    <!-- 列表公共查询语句：关联客户、商机与用户名称；渠道按明细行聚合（一个合同可跨多个渠道） -->
+    <sql id="selectContractJoinColumns">
+        select a.id, a.bus_id, b.name as bus_name,
+               a.consumer_id, cu.name as consumer_name,
+               (select group_concat(distinct s2.name order by s2.name separator '、')
+                  from crm_contract_product cp2
+                  inner join crm_supplier s2 on cp2.supplier_id = s2.id
+                 where cp2.contract_id = a.id and cp2.deleted = 0) as supplier_name,
+               a.contact_no, a.contract_name, a.status, a.contract_entity,
+               a.expire_time, a.audit_time, a.sign_time, a.cancel_time, a.archive_time,
+               a.audit_opinion, a.cancel_reason, a.remark,
+               a.creator as creator_id, e.user_name as creator_name, c.user_name as updater_name,
+               a.create_time, a.update_time, a.deleted
+        from crm_contract a
+        left join crm_business b on a.bus_id = b.id
+        left join crm_customer cu on a.consumer_id = cu.id
+        left join sys_user e on a.creator = e.user_id
+        left join sys_user c on a.updater = c.user_id
+    </sql>
+
+    <select id="selectCrmContractList" parameterType="com.ruoyi.crm.dto.CrmContractDto"
+            resultType="com.ruoyi.crm.dto.CrmContractDto">
+        <include refid="selectContractJoinColumns"/>
+        <where>
+            a.deleted = 0
+            <if test="contactNo != null and contactNo != ''"> and a.contact_no like concat('%', #{contactNo}, '%')</if>
+            <if test="contractName != null and contractName != ''"> and a.contract_name like concat('%', #{contractName}, '%')</if>
+            <!-- 渠道筛选：按明细行渠道匹配（一个合同可涉及多个渠道） -->
+            <if test="supplierId != null">
+                and exists (select 1 from crm_contract_product cp
+                             where cp.contract_id = a.id and cp.deleted = 0
+                               and cp.supplier_id = #{supplierId})
+            </if>
+            <if test="consumerId != null"> and a.consumer_id = #{consumerId}</if>
+            <if test="busId != null"> and a.bus_id = #{busId}</if>
+            <if test="status != null"> and a.status = #{status}</if>
+            <!-- 状态多选：前端以逗号分隔字符串传参 -->
+            <if test="params.statusList != null and params.statusList != ''">
+                and find_in_set(a.status, #{params.statusList})
+            </if>
+            <!-- 创建时间范围 -->
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+            <!-- 数据权限：客户负责人按客户过滤（合同不再有独立渠道归属） -->
+            <if test="params.scopeCustomerIds != null and params.scopeCustomerIds.size() > 0">
+                and a.consumer_id in
+                <foreach collection="params.scopeCustomerIds" item="scopeCustomerId" open="(" separator="," close=")">
+                    #{scopeCustomerId}
+                </foreach>
+            </if>
+            <!-- 数据权限：销售/客户账号按创建人过滤 -->
+            <if test="params.scopeCreator != null">
+                and a.creator = #{params.scopeCreator}
+            </if>
+        </where>
+        order by a.id desc
+    </select>
+
+    <select id="selectCrmContractDetail" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmContractDto">
+        <include refid="selectContractJoinColumns"/>
+        where a.id = #{id} and a.deleted = 0
+    </select>
+
+    <select id="selectCrmContractById" parameterType="Long" resultMap="CrmContractResult">
+        <include refid="selectCrmContractVo"/>
+        where id = #{id} and deleted = 0
+    </select>
+
+    <insert id="insertCrmContract" parameterType="CrmContract" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_contract
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="busId != null">bus_id,</if>
+            <if test="consumerId != null">consumer_id,</if>
+            <if test="contactNo != null and contactNo != ''">contact_no,</if>
+            <if test="contractName != null and contractName != ''">contract_name,</if>
+            <if test="status != null">status,</if>
+            <if test="contractEntity != null">contract_entity,</if>
+            <if test="expireTime != null">expire_time,</if>
+            <if test="remark != null">remark,</if>
+            <if test="creator != null">creator,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updater != null">updater,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="deleted != null">deleted,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="busId != null">#{busId},</if>
+            <if test="consumerId != null">#{consumerId},</if>
+            <if test="contactNo != null and contactNo != ''">#{contactNo},</if>
+            <if test="contractName != null and contractName != ''">#{contractName},</if>
+            <if test="status != null">#{status},</if>
+            <if test="contractEntity != null">#{contractEntity},</if>
+            <if test="expireTime != null">#{expireTime},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updater != null">#{updater},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="deleted != null">#{deleted},</if>
+         </trim>
+    </insert>
+
+    <!-- 主信息更新：不含 status / contact_no，二者由状态机与编号规则独占维护 -->
+    <update id="updateCrmContract" parameterType="CrmContract">
+        update crm_contract
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="busId != null">bus_id = #{busId},</if>
+            <if test="consumerId != null">consumer_id = #{consumerId},</if>
+            <if test="contractName != null and contractName != ''">contract_name = #{contractName},</if>
+            <if test="contractEntity != null">contract_entity = #{contractEntity},</if>
+            <if test="expireTime != null">expire_time = #{expireTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </trim>
+        where id = #{id} and deleted = 0
+    </update>
+
+    <!-- 状态变更：带 from_status 条件，防止并发覆盖 -->
+    <update id="updateContractStatus">
+        update crm_contract
+        <trim prefix="SET" suffixOverrides=",">
+            status = #{toStatus},
+            <if test="auditTime != null">audit_time = #{auditTime},</if>
+            <if test="signTime != null">sign_time = #{signTime},</if>
+            <if test="auditOpinion != null">audit_opinion = #{auditOpinion},</if>
+            <if test="cancelTime != null">cancel_time = #{cancelTime},</if>
+            <if test="cancelReason != null">cancel_reason = #{cancelReason},</if>
+            <if test="archiveTime != null">archive_time = #{archiveTime},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </trim>
+        where id = #{id} and status = #{fromStatus} and deleted = 0
+    </update>
+
+    <delete id="deleteCrmContractById" parameterType="Long">
+        update crm_contract set deleted = 1 where id = #{id}
+    </delete>
+
+    <delete id="deleteCrmContractByIds" parameterType="String">
+        update crm_contract set deleted = 1 where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <!-- 数据权限：当前账号作为负责人所服务的客户ID集合（合同按客户收敛） -->
+    <select id="selectOwnedCustomerIds" parameterType="String" resultType="java.lang.Long">
+        select id from crm_customer where deleted = 0 and owner_user = #{ownerUser}
+    </select>
+
+    <!-- 数据权限：当前账号作为负责人所服务的渠道ID集合（财务对账仍按渠道收敛） -->
+    <select id="selectOwnedSupplierIds" parameterType="String" resultType="java.lang.Long">
+        select id from crm_supplier where deleted = 0 and owner_user = #{ownerUser}
+    </select>
+
+    <select id="selectExpiredContracts" resultType="CrmContract">
+        select id, contact_no, contract_name, status, expire_time
+        from crm_contract
+        where deleted = 0 and status = 2 and expire_time is not null and expire_time &lt; #{now}
+    </select>
+
+    <update id="updateExpiredContract">
+        update crm_contract set status = 3, update_time = #{now}
+        where id = #{id} and status = 2 and deleted = 0
+    </update>
+</mapper>

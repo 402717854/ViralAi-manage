@@ -146,3 +146,21 @@ xss:
   excludes: /system/notice
   # 匹配链接
   urlPatterns: /system/*,/monitor/*,/tool/*
+
+# CRM 网关流水拉取
+# 拉取协议、接口地址、密钥都挂在「渠道账户」上（crm_supplier_account），
+# 这里只放与具体上游无关的通用参数；以下为默认值，不配也能跑。
+crm:
+  gateway:
+    # 旧的通用拉取方式：账户未配置 pull_channel 时使用，留空表示不使用
+    pull-url: ""
+    pull-token: ""
+    pull:
+      # 每页条数（viralai 中转站上限 100，超过按 100 处理）
+      page-size: 100
+      # 最大翻页数，防止上游分页异常导致死循环
+      max-pages: 200
+      # 连接超时（毫秒）
+      connect-timeout: 5000
+      # 读取超时（毫秒）
+      read-timeout: 60000

@@ -31,7 +31,7 @@ public class CrmBusiness extends BaseEntity
     /** 客户编号 */
     private Long customerId;
 
-    /** 渠道编号 */
+    /** 渠道编号：仅用于列表按明细渠道筛选，不作为商机属性持久化 */
     private Long supplierId;
 
     /** 负责人 */

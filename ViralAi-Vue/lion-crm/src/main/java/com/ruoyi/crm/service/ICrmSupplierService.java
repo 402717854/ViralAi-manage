@@ -2,6 +2,7 @@ package com.ruoyi.crm.service;
 
 import java.util.List;
 import com.ruoyi.crm.domain.CrmSupplier;
+import com.ruoyi.crm.dto.CrmSupplierAccountDto;
 import com.ruoyi.crm.dto.CrmSupplierDto;
 import com.ruoyi.crm.dto.CrmSupplierOptionDto;
 import com.ruoyi.crm.dto.CrmSupplierProjectDto;
@@ -47,6 +48,16 @@ public interface ICrmSupplierService
      * @return 供应商产品关联明细集合
      */
     public List<CrmSupplierProjectDto> selectSupplierProjectListBySupplierId(Long supplierId);
+
+    /**
+     * 按供应商编号查询其渠道账户列表
+     * <p>
+     * 供供应商详情页展示账户信息，返回结果中的 apiKey 已脱敏，不包含账户密码。
+     *
+     * @param supplierId 供应商编号
+     * @return 渠道账户集合
+     */
+    public List<CrmSupplierAccountDto> selectAccountListBySupplierId(Long supplierId);
 
     /**
      * 新增CRM 供应商，并同步保存产品关联列表

@@ -7,11 +7,14 @@ import java.util.List;
 import java.util.Set;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
+import com.ruoyi.crm.domain.CrmSupplierAccount;
 import com.ruoyi.crm.domain.CrmSupplierProject;
+import com.ruoyi.crm.dto.CrmSupplierAccountDto;
 import com.ruoyi.crm.dto.CrmSupplierDto;
 import com.ruoyi.crm.dto.CrmSupplierOptionDto;
 import com.ruoyi.crm.dto.CrmSupplierProjectDto;
 import com.ruoyi.crm.dto.CrmSupplierVo;
+import com.ruoyi.crm.mapper.CrmSupplierAccountMapper;
 import com.ruoyi.crm.mapper.CrmSupplierProjectMapper;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +38,9 @@ public class CrmSupplierServiceImpl implements ICrmSupplierService
 
     @Autowired
     private CrmSupplierProjectMapper crmSupplierProjectMapper;
+
+    @Autowired
+    private CrmSupplierAccountMapper crmSupplierAccountMapper;
 
     /**
      * 查询CRM 供应商详情（含产品关联列表）
@@ -169,6 +175,27 @@ public class CrmSupplierServiceImpl implements ICrmSupplierService
             return Collections.emptyList();
         }
         return crmSupplierProjectMapper.selectSupplierProjectListBySupplierId(supplierId);
+    }
+
+    /**
+     * 按供应商编号查询其渠道账户列表
+     * <p>
+     * 复用渠道账户列表查询（resultMap 中 apiKey 已脱敏、不返回密码），
+     * 因此详情页展示的密钥为掩码值，完整密钥仍需在渠道账户管理中查看。
+     *
+     * @param supplierId 供应商编号
+     * @return 渠道账户集合
+     */
+    @Override
+    public List<CrmSupplierAccountDto> selectAccountListBySupplierId(Long supplierId)
+    {
+        if (supplierId == null)
+        {
+            return Collections.emptyList();
+        }
+        CrmSupplierAccount query = new CrmSupplierAccount();
+        query.setSupplierId(supplierId);
+        return crmSupplierAccountMapper.selectCrmSupplierAccountList(query);
     }
 
     /**

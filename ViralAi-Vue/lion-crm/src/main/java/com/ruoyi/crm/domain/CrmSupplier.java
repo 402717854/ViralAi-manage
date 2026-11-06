@@ -19,6 +19,9 @@ public class CrmSupplier extends BaseEntity
     /** 编号，主键自增 */
     private Long id;
 
+    /** 渠道编码，用于合同编号前缀，如 QD001 */
+    private String supplierCode;
+
     /** 供应商名称 */
     private String name;
 

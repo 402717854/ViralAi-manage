@@ -10,14 +10,16 @@ import lombok.Setter;
 /**
  * CRM 商机状态流转请求对象
  *
+ * <p>流转合法性由后端 {@link com.ruoyi.crm.enums.BusStatusEnum} 白名单二次校验，前端按钮仅作体验层控制。</p>
+ *
  * @author ruoyi
- * @date 2026-10-28
+ * @date 2026-11-04
  */
 @Getter
 @Setter
 public class CrmBusinessStatusVo
 {
-    /** 商机编号 */
+    /** 商机ID */
     @NotNull(message = "商机编号不能为空")
     private Long id;
 
@@ -29,13 +31,13 @@ public class CrmBusinessStatusVo
     @Size(max = 255, message = "中断备注长度不能超过255个字符")
     private String failRemark;
 
-    /** 成交日期，仅在流转到 4 成交 时生效，为空则取当前时间 */
+    /** 成交时间，仅在流转到 4 成交 时生效，为空则取当前时间 */
     private Date dealTime;
 
     /**
-     * 授信金额，流转到 2 提交测试 时必填且必须大于 0（对应 credit_amount decimal）
+     * 意向授信额度，可选；填写时随流转一并更新（对应 credit_amount decimal）
      *
-     * <p>授信金额是进入测试流程的前置条件，未填写不允许提交测试。</p>
+     * <p>授信额度在商机编辑页维护，流转接口允许同步补录，避免二次修改。</p>
      */
     private BigDecimal creditAmount;
 }

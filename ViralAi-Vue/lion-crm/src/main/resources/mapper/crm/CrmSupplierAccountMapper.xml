@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmSupplierAccountMapper">
+
+    <!-- 列表：apiKey 脱敏，密码不查询，避免敏感信息出现在列表响应中 -->
+    <select id="selectCrmSupplierAccountList" parameterType="CrmSupplierAccount"
+            resultType="com.ruoyi.crm.dto.CrmSupplierAccountDto">
+        select a.id, a.account_name, a.api_key_no,
+        case
+            when a.api_key is null or a.api_key = '' then ''
+            when char_length(a.api_key) &lt;= 8 then '********'
+            else concat(left(a.api_key, 4), '****', right(a.api_key, 4))
+        end as api_key,
+        a.supplier_id, s.name as supplier_name, a.status, a.type,
+        a.pull_channel, a.pull_url, a.pull_user,
+        a.creator, cu.user_name as creator_name, a.create_time,
+        a.updater, uu.user_name as updater_name, a.update_time
+        from crm_supplier_account a
+        left join crm_supplier s on a.supplier_id = s.id
+        left join sys_user cu on a.creator = cu.user_id
+        left join sys_user uu on a.updater = uu.user_id
+        <where>
+            <if test="accountName != null and accountName != ''">
+                and a.account_name like concat('%', #{accountName}, '%')
+            </if>
+            <if test="apiKeyNo != null and apiKeyNo != ''">
+                and a.api_key_no like concat('%', #{apiKeyNo}, '%')
+            </if>
+            <if test="supplierId != null">
+                and a.supplier_id = #{supplierId}
+            </if>
+            <if test="status != null">
+                and a.status = #{status}
+            </if>
+            <if test="type != null">
+                and a.type = #{type}
+            </if>
+        </where>
+        order by a.create_time desc, a.id desc
+    </select>
+
+    <!-- 详情：返回完整 apiKey 供编辑回填；密码不回传，修改时留空表示不变更 -->
+    <select id="selectCrmSupplierAccountById" parameterType="Long"
+            resultType="com.ruoyi.crm.dto.CrmSupplierAccountDto">
+        select a.id, a.account_name, a.api_key_no, a.api_key,
+        a.supplier_id, s.name as supplier_name, a.status, a.type,
+        a.pull_channel, a.pull_url, a.pull_user,
+        a.creator, cu.user_name as creator_name, a.create_time,
+        a.updater, uu.user_name as updater_name, a.update_time
+        from crm_supplier_account a
+        left join crm_supplier s on a.supplier_id = s.id
+        left join sys_user cu on a.creator = cu.user_id
+        left join sys_user uu on a.updater = uu.user_id
+        where a.id = #{id}
+    </select>
+
+    <!-- 客户已关联渠道下的账户选项：供商机/合同明细选择渠道账户，只返回非敏感字段 -->
+    <select id="selectAccountOptionsByCustomerId" resultType="com.ruoyi.crm.dto.CrmSupplierAccountDto">
+        select a.id, a.account_name, a.api_key_no,
+               a.supplier_id, s.name as supplier_name, a.status, a.type
+        from crm_supplier_account a
+        inner join crm_customer_supplier cs on cs.supplier_id = a.supplier_id
+        left join crm_supplier s on a.supplier_id = s.id
+        where cs.customer_id = #{customerId}
+        order by a.supplier_id, (a.status = 1) desc, a.id
+    </select>
+
+    <!--
+      拉取流水用的账户清单（含完整 apiKey，仅供服务端内部拉取使用，不得下发到前端）
+      范围：指定账户 > 指定渠道下的启用账户 > 全部启用账户
+    -->
+    <select id="selectAccountsForPull" resultType="com.ruoyi.crm.domain.CrmSupplierAccount">
+        select a.id, a.account_name, a.api_key_no, a.api_key, a.supplier_id, a.status, a.type,
+               a.pull_channel, a.pull_url, a.pull_user
+        from crm_supplier_account a
+        <where>
+            <if test="accountId != null">
+                and a.id = #{accountId}
+            </if>
+            <if test="supplierId != null">
+                and a.supplier_id = #{supplierId}
+            </if>
+            <if test="accountId == null">
+                and a.status = 1
+            </if>
+        </where>
+        order by a.supplier_id, a.id
+    </select>
+
+    <select id="countBySupplierAndName" resultType="java.lang.Integer">
+        select count(1) from crm_supplier_account
+        where supplier_id = #{supplierId}
+          and account_name = #{accountName}
+        <if test="excludeId != null">
+            and id != #{excludeId}
+        </if>
+    </select>
+
+    <insert id="insertCrmSupplierAccount" parameterType="CrmSupplierAccount" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_supplier_account
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="accountName != null">account_name,</if>
+            <if test="accountPwd != null">account_pwd,</if>
+            <if test="apiKeyNo != null">api_key_no,</if>
+            <if test="apiKey != null">api_key,</if>
+            <if test="supplierId != null">supplier_id,</if>
+            <if test="status != null">status,</if>
+            <if test="type != null">type,</if>
+            <if test="pullChannel != null">pull_channel,</if>
+            <if test="pullUrl != null">pull_url,</if>
+            <if test="pullUser != null">pull_user,</if>
+            <if test="creator != null">creator,</if>
+            <if test="createTime != null">create_time,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="accountName != null">#{accountName},</if>
+            <if test="accountPwd != null">#{accountPwd},</if>
+            <if test="apiKeyNo != null">#{apiKeyNo},</if>
+            <if test="apiKey != null">#{apiKey},</if>
+            <if test="supplierId != null">#{supplierId},</if>
+            <if test="status != null">#{status},</if>
+            <if test="type != null">#{type},</if>
+            <if test="pullChannel != null">#{pullChannel},</if>
+            <if test="pullUrl != null">#{pullUrl},</if>
+            <if test="pullUser != null">#{pullUser},</if>
+            <if test="creator != null">#{creator},</if>
+            <if test="createTime != null">#{createTime},</if>
+        </trim>
+    </insert>
+
+    <update id="updateCrmSupplierAccount" parameterType="CrmSupplierAccount">
+        update crm_supplier_account
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="accountName != null">account_name = #{accountName},</if>
+            <if test="accountPwd != null and accountPwd != ''">account_pwd = #{accountPwd},</if>
+            <if test="apiKeyNo != null">api_key_no = #{apiKeyNo},</if>
+            <if test="apiKey != null and apiKey != ''">api_key = #{apiKey},</if>
+            <if test="supplierId != null">supplier_id = #{supplierId},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="pullChannel != null">pull_channel = #{pullChannel},</if>
+            <if test="pullUrl != null">pull_url = #{pullUrl},</if>
+            <if test="pullUser != null">pull_user = #{pullUser},</if>
+            <if test="updater != null">updater = #{updater},</if>
+            update_time = sysdate(),
+        </trim>
+        where id = #{id}
+    </update>
+
+</mapper>

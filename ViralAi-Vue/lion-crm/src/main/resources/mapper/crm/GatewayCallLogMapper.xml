@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.GatewayCallLogMapper">
+
+    <resultMap type="GatewayCallLog" id="GatewayCallLogResult">
+        <result property="id"               column="id"                />
+        <result property="callNo"           column="call_no"           />
+        <result property="customerId"       column="customer_id"       />
+        <result property="supplierId"       column="supplier_id"       />
+        <result property="supplierAccountId" column="supplier_account_id" />
+        <result property="productCode"      column="product_code"      />
+        <result property="modelType"        column="model_type"        />
+        <result property="promptTokens"     column="prompt_tokens"     />
+        <result property="completionTokens" column="completion_tokens" />
+        <result property="totalTokens"      column="total_tokens"      />
+        <result property="totalFees"      column="total_fees"      />
+        <result property="callTime"         column="call_time"         />
+        <result property="callStatus"       column="call_status"       />
+        <result property="errMsg"           column="err_msg"           />
+        <result property="rawPriceDetail"   column="raw_price_detail"  />
+        <result property="createTime"       column="create_time"       />
+        <result property="deleted"          column="deleted"           />
+    </resultMap>
+
+    <sql id="selectGatewayCallLogVo">
+        select id, call_no, customer_id, supplier_id, supplier_account_id, product_code, model_type,
+               prompt_tokens, completion_tokens, total_tokens, total_fees, call_time, call_status, err_msg,
+               raw_price_detail, create_time, deleted
+        from gateway_call_log
+    </sql>
+
+    <select id="selectGatewayCallLogList" parameterType="com.ruoyi.crm.dto.GatewayCallLogDto"
+            resultType="com.ruoyi.crm.dto.GatewayCallLogDto">
+        select a.id, a.call_no, a.customer_id, cu.name as customer_name,
+               a.supplier_id, s.name as supplier_name,
+               a.supplier_account_id, sa.account_name as supplier_account_name,
+               a.product_code, a.model_type, a.prompt_tokens, a.completion_tokens, a.total_tokens,
+               a.total_fees, a.call_time, a.call_status, a.err_msg, a.raw_price_detail, a.create_time,
+               case when u.id is null then 0 else 1 end as reconciled
+        from gateway_call_log a
+        left join crm_customer cu on a.customer_id = cu.id
+        left join crm_supplier s on a.supplier_id = s.id
+        left join crm_supplier_account sa on a.supplier_account_id = sa.id
+        left join crm_contract_usage u on u.call_log_id = a.id
+        <where>
+            a.deleted = 0
+            <if test="callNo != null and callNo != ''"> and a.call_no like concat('%', #{callNo}, '%')</if>
+            <if test="customerId != null"> and a.customer_id = #{customerId}</if>
+            <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+            <if test="supplierAccountId != null and supplierAccountId > 0"> and a.supplier_account_id = #{supplierAccountId}</if>
+            <if test="productCode != null and productCode != ''"> and a.product_code like concat('%', #{productCode}, '%')</if>
+            <if test="modelType != null and modelType != ''"> and a.model_type = #{modelType}</if>
+            <if test="callStatus != null"> and a.call_status = #{callStatus}</if>
+            <if test="reconciled != null and reconciled == 0"> and u.id is null</if>
+            <if test="reconciled != null and reconciled == 1"> and u.id is not null</if>
+            <!-- 调用时间范围（计费归属时间） -->
+            <if test="params.beginTime != null and params.beginTime != ''">
+                and a.call_time &gt;= (case when char_length(#{params.beginTime}) &lt;= 10
+                                           then concat(#{params.beginTime}, ' 00:00:00') else #{params.beginTime} end)
+            </if>
+            <if test="params.endTime != null and params.endTime != ''">
+                and a.call_time &lt;= (case when char_length(#{params.endTime}) &lt;= 10
+                                           then concat(#{params.endTime}, ' 23:59:59') else #{params.endTime} end)
+            </if>
+            <!-- 数据权限：渠道管理员只能看自己渠道的流水 -->
+            <if test="params.scopeSupplierIds != null and params.scopeSupplierIds.size() > 0">
+                and a.supplier_id in
+                <foreach collection="params.scopeSupplierIds" item="scopeSupplierId" open="(" separator="," close=")">
+                    #{scopeSupplierId}
+                </foreach>
+            </if>
+        </where>
+        order by a.call_time desc, a.id desc
+    </select>
+
+    <select id="selectGatewayCallLogById" parameterType="Long" resultMap="GatewayCallLogResult">
+        <include refid="selectGatewayCallLogVo"/>
+        where id = #{id} and deleted = 0
+    </select>
+
+    <insert id="insertGatewayCallLog" parameterType="GatewayCallLog" useGeneratedKeys="true" keyProperty="id">
+        insert into gateway_call_log (
+            call_no, customer_id, supplier_id, supplier_account_id, product_code, model_type,
+            prompt_tokens, completion_tokens, total_tokens,total_fees, call_time, call_status,
+            err_msg, raw_price_detail, create_time, deleted
+        ) values (
+            #{callNo}, #{customerId}, #{supplierId}, ifnull(#{supplierAccountId}, 0), #{productCode}, #{modelType},
+            ifnull(#{promptTokens}, 0), ifnull(#{completionTokens}, 0), ifnull(#{totalTokens}, 0), ifnull(#{totalFees}, 0),
+            #{callTime}, ifnull(#{callStatus}, 1),
+            #{errMsg}, #{rawPriceDetail}, ifnull(#{createTime}, sysdate()), 0
+        )
+    </insert>
+
+    <!-- 待对账流水：调用成功且尚未生成台账；单次最多 20000 条，超出部分由下一轮任务继续 -->
+    <select id="selectReconcileCallLogs" resultMap="GatewayCallLogResult">
+        select a.id, a.call_no, a.customer_id, a.supplier_id, a.supplier_account_id, a.product_code, a.model_type,
+               a.prompt_tokens, a.completion_tokens, a.total_tokens, a.total_fees, a.call_time, a.call_status,
+               a.err_msg, a.raw_price_detail, a.create_time, a.deleted
+        from gateway_call_log a
+        where a.deleted = 0 and a.call_status = 1
+          and a.call_time &gt;= #{startTime} and a.call_time &lt;= #{endTime}
+          <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+          and not exists (select 1 from crm_contract_usage u where u.call_log_id = a.id)
+        order by a.call_time, a.id
+        limit 20000
+    </select>
+
+    <select id="countByCallNo" resultType="java.lang.Integer">
+        select count(1) from gateway_call_log where call_no = #{callNo}
+    </select>
+</mapper>

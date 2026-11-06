@@ -89,6 +89,12 @@
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="模型厂商" align="center" prop="name" show-overflow-tooltip />
       <el-table-column label="模型型号" align="center" prop="no" show-overflow-tooltip />
+      <el-table-column label="模型编码" align="center" prop="productCode" min-width="150" show-overflow-tooltip />
+      <el-table-column label="基准价(售价/成本)" align="center" width="180">
+        <template #default="scope">
+          <span>{{ formatPrice(scope.row.baseSellPrice) }} / {{ formatPrice(scope.row.baseCostPrice) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="模型类型" align="center" prop="type" width="110">
         <template #default="scope">
           <el-tag v-if="scope.row.type != null" size="small" type="info">{{ modelTypeLabel(scope.row.type) }}</el-tag>
@@ -135,6 +141,11 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
+            <el-form-item label="模型编码" prop="productCode">
+              <el-input v-model="form.productCode" placeholder="网关 product_code，留空回退模型型号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
             <el-form-item label="模型类型" prop="type">
               <el-select v-model="form.type" placeholder="请选择模型类型" style="width: 100%">
                 <el-option
@@ -156,6 +167,30 @@
                   :value="item.value"
                 />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="基准售价" prop="baseSellPrice">
+              <el-input-number
+                v-model="form.baseSellPrice"
+                :precision="6"
+                :step="0.1"
+                :controls="false"
+                placeholder="每千token"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="基准成本价" prop="baseCostPrice">
+              <el-input-number
+                v-model="form.baseCostPrice"
+                :precision="6"
+                :step="0.1"
+                :controls="false"
+                placeholder="每千token"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -235,6 +270,14 @@ const { queryParams, form, rules } = toRefs(data)
 function modelTypeLabel(value) {
   const hit = modelTypeOptions.find(item => item.value === value)
   return hit ? hit.label : value
+}
+
+/** 基准价展示：未维护时以 - 占位，避免误导为 0 元 */
+function formatPrice(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-"
+  }
+  return Number(value).toFixed(6)
 }
 
 
