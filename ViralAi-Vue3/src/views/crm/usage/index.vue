@@ -119,9 +119,14 @@
           </el-table-column>
           <el-table-column label="模型编码" align="center" prop="productCode" min-width="150" show-overflow-tooltip />
           <el-table-column label="token" align="center" prop="totalTokens" width="110" />
-          <el-table-column label="消耗费用" align="center" width="150" show-overflow-tooltip>
+          <el-table-column label="刊例价费用" align="center" width="150" show-overflow-tooltip>
             <template #default="scope">
               <span>{{ formatAmount(scope.row.totalFees) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="折后费用" align="center" width="160" show-overflow-tooltip>
+            <template #default="scope">
+              <span>{{ formatAmount(scope.row.actualFees) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="应收金额" align="center" width="150" show-overflow-tooltip>
@@ -285,9 +290,14 @@
             </template>
           </el-table-column>
           <el-table-column label="总token" align="center" prop="totalTokens" width="110" />
-          <el-table-column label="消耗费用" align="center" width="150" show-overflow-tooltip>
+          <el-table-column label="刊例价费用" align="center" width="150" show-overflow-tooltip>
             <template #default="scope">
               <span>{{ formatAmount(scope.row.totalFees) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="折后费用" align="center" width="160" show-overflow-tooltip>
+            <template #default="scope">
+              <span>{{ formatAmount(scope.row.actualFees) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="调用状态" align="center" width="100">
@@ -440,7 +450,8 @@
         <el-descriptions-item label="合同编号">{{ usageDetail.contactNo || "-" }}</el-descriptions-item>
         <el-descriptions-item label="账单编号">{{ usageDetail.billNo || "-" }}</el-descriptions-item>
         <el-descriptions-item label="token">{{ usageDetail.totalTokens }}</el-descriptions-item>
-        <el-descriptions-item label="消耗费用">{{ formatAmount(usageDetail.totalFees) }}</el-descriptions-item>
+        <el-descriptions-item label="刊例价费用">{{ formatAmount(usageDetail.totalFees) }}</el-descriptions-item>
+        <el-descriptions-item label="折后费用">{{ formatAmount(usageDetail.actualFees) }}</el-descriptions-item>
         <el-descriptions-item label="调用时间">{{ parseTime(usageDetail.callTime, '{y}-{m}-{d} {h}:{i}:{s}') }}</el-descriptions-item>
         <el-descriptions-item label="基准售价(千token)">{{ formatAmount(usageDetail.baseSellPrice) }}</el-descriptions-item>
         <el-descriptions-item label="售价折扣">{{ usageDetail.sellDiscount ?? "-" }}</el-descriptions-item>

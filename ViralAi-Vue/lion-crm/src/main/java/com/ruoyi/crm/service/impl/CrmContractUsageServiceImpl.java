@@ -141,7 +141,7 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
         for (Long target : targets)
         {
             reconcileCallLogs(target, start, end, result);
-//            retryUsages(target, start, end, retryAbnormal, scope, result);
+            retryUsages(target, start, end, retryAbnormal, scope, result);
         }
         return result;
     }
@@ -162,7 +162,7 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
             result.setScanned(result.getScanned() + 1);
             CrmContractUsage usage = crmUsageMatchEngine.buildFromCallLog(callLog.getId(), callLog.getCallNo(),
                     callLog.getCustomerId(), callLog.getSupplierId(), callLog.getSupplierAccountId(),
-                    callLog.getProductCode(), callLog.getTotalTokens(),callLog.getTotalFees(), callLog.getCallTime());
+                    callLog.getProductCode(), callLog.getTotalTokens(),callLog.getTotalFees(),callLog.getActualFees(),callLog.getCallTime());
             usage.setCreateTime(new Date());
             try
             {

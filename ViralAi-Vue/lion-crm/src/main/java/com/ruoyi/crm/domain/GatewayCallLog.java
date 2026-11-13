@@ -54,8 +54,11 @@ public class GatewayCallLog extends BaseEntity
     /** 总token */
     private Long totalTokens;
 
-    /**总消耗费用*/
+    /** 总消耗费用 */
     private BigDecimal totalFees;
+
+    /** 实际消耗金额（渠道实际扣费口径，可能为空） */
+    private BigDecimal actualFees;
 
     /** 调用发生时间（计费归属时间） */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

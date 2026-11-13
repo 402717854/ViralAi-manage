@@ -16,6 +16,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="completionTokens" column="completion_tokens" />
         <result property="totalTokens"      column="total_tokens"      />
         <result property="totalFees"      column="total_fees"      />
+        <result property="actualFees"     column="actual_fees"     />
         <result property="callTime"         column="call_time"         />
         <result property="callStatus"       column="call_status"       />
         <result property="errMsg"           column="err_msg"           />
@@ -26,7 +27,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <sql id="selectGatewayCallLogVo">
         select id, call_no, customer_id, supplier_id, supplier_account_id, product_code, model_type,
-               prompt_tokens, completion_tokens, total_tokens, total_fees, call_time, call_status, err_msg,
+               prompt_tokens, completion_tokens, total_tokens, total_fees, actual_fees, call_time, call_status, err_msg,
                raw_price_detail, create_time, deleted
         from gateway_call_log
     </sql>
@@ -37,7 +38,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                a.supplier_id, s.name as supplier_name,
                a.supplier_account_id, sa.account_name as supplier_account_name,
                a.product_code, a.model_type, a.prompt_tokens, a.completion_tokens, a.total_tokens,
-               a.total_fees, a.call_time, a.call_status, a.err_msg, a.raw_price_detail, a.create_time,
+               a.total_fees, a.actual_fees, a.call_time, a.call_status, a.err_msg, a.raw_price_detail, a.create_time,
                case when u.id is null then 0 else 1 end as reconciled
         from gateway_call_log a
         left join crm_customer cu on a.customer_id = cu.id
@@ -83,20 +84,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="insertGatewayCallLog" parameterType="GatewayCallLog" useGeneratedKeys="true" keyProperty="id">
         insert into gateway_call_log (
             call_no, customer_id, supplier_id, supplier_account_id, product_code, model_type,
-            prompt_tokens, completion_tokens, total_tokens,total_fees, call_time, call_status,
+            prompt_tokens, completion_tokens, total_tokens,total_fees,actual_fees, call_time, call_status,
             err_msg, raw_price_detail, create_time, deleted
         ) values (
             #{callNo}, #{customerId}, #{supplierId}, ifnull(#{supplierAccountId}, 0), #{productCode}, #{modelType},
             ifnull(#{promptTokens}, 0), ifnull(#{completionTokens}, 0), ifnull(#{totalTokens}, 0), ifnull(#{totalFees}, 0),
-            #{callTime}, ifnull(#{callStatus}, 1),
-            #{errMsg}, #{rawPriceDetail}, ifnull(#{createTime}, sysdate()), 0
+            ifnull(#{actualFees}, 0),#{callTime}, ifnull(#{callStatus}, 1),#{errMsg}, #{rawPriceDetail}, ifnull(#{createTime}, sysdate()), 0
         )
     </insert>
 
     <!-- 待对账流水：调用成功且尚未生成台账；单次最多 20000 条，超出部分由下一轮任务继续 -->
     <select id="selectReconcileCallLogs" resultMap="GatewayCallLogResult">
         select a.id, a.call_no, a.customer_id, a.supplier_id, a.supplier_account_id, a.product_code, a.model_type,
-               a.prompt_tokens, a.completion_tokens, a.total_tokens, a.total_fees, a.call_time, a.call_status,
+               a.prompt_tokens, a.completion_tokens, a.total_tokens, a.total_fees, a.actual_fees, a.call_time, a.call_status,
                a.err_msg, a.raw_price_detail, a.create_time, a.deleted
         from gateway_call_log a
         where a.deleted = 0 and a.call_status = 1

@@ -13,7 +13,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             when char_length(a.api_key) &lt;= 8 then '********'
             else concat(left(a.api_key, 4), '****', right(a.api_key, 4))
         end as api_key,
-        a.supplier_id, s.name as supplier_name, a.status, a.type,
+        a.supplier_id, s.name as supplier_name, a.status, a.type, a.pull_type,
         a.pull_channel, a.pull_url, a.pull_user,
         a.creator, cu.user_name as creator_name, a.create_time,
         a.updater, uu.user_name as updater_name, a.update_time
@@ -45,7 +45,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectCrmSupplierAccountById" parameterType="Long"
             resultType="com.ruoyi.crm.dto.CrmSupplierAccountDto">
         select a.id, a.account_name, a.api_key_no, a.api_key,
-        a.supplier_id, s.name as supplier_name, a.status, a.type,
+        a.supplier_id, s.name as supplier_name, a.status, a.type, a.pull_type,
         a.pull_channel, a.pull_url, a.pull_user,
         a.creator, cu.user_name as creator_name, a.create_time,
         a.updater, uu.user_name as updater_name, a.update_time
@@ -70,9 +70,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <!--
       拉取流水用的账户清单（含完整 apiKey，仅供服务端内部拉取使用，不得下发到前端）
       范围：指定账户 > 指定渠道下的启用账户 > 全部启用账户
+      注意：这里不按 pull_type 过滤——文件上传方式的账户同样需要维护客户/模型映射，
+            映射配置页用它做账户存在性校验；是否参与路由拉取由调用方按 pull_type 判断。
     -->
     <select id="selectAccountsForPull" resultType="com.ruoyi.crm.domain.CrmSupplierAccount">
-        select a.id, a.account_name, a.api_key_no, a.api_key, a.supplier_id, a.status, a.type,
+        select a.id, a.account_name, a.api_key_no, a.api_key, a.supplier_id, a.status, a.type, a.pull_type,
                a.pull_channel, a.pull_url, a.pull_user
         from crm_supplier_account a
         <where>
@@ -108,6 +110,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="supplierId != null">supplier_id,</if>
             <if test="status != null">status,</if>
             <if test="type != null">type,</if>
+            <if test="pullType != null">pull_type,</if>
             <if test="pullChannel != null">pull_channel,</if>
             <if test="pullUrl != null">pull_url,</if>
             <if test="pullUser != null">pull_user,</if>
@@ -122,6 +125,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="supplierId != null">#{supplierId},</if>
             <if test="status != null">#{status},</if>
             <if test="type != null">#{type},</if>
+            <if test="pullType != null">#{pullType},</if>
             <if test="pullChannel != null">#{pullChannel},</if>
             <if test="pullUrl != null">#{pullUrl},</if>
             <if test="pullUser != null">#{pullUser},</if>
@@ -140,9 +144,21 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="supplierId != null">supplier_id = #{supplierId},</if>
             <if test="status != null">status = #{status},</if>
             <if test="type != null">type = #{type},</if>
-            <if test="pullChannel != null">pull_channel = #{pullChannel},</if>
-            <if test="pullUrl != null">pull_url = #{pullUrl},</if>
-            <if test="pullUser != null">pull_user = #{pullUser},</if>
+            <if test="pullType != null">pull_type = #{pullType},</if>
+            <!-- 切换为「文件上传」时强制清空路由配置：null 会被下面的判空 if 跳过，
+                 不显式置空会把上一次的接口地址留在库里，回切时容易拉到错误的上游 -->
+            <choose>
+                <when test="pullType != null and pullType == 2">
+                    pull_channel = null,
+                    pull_url = null,
+                    pull_user = null,
+                </when>
+                <otherwise>
+                    <if test="pullChannel != null">pull_channel = #{pullChannel},</if>
+                    <if test="pullUrl != null">pull_url = #{pullUrl},</if>
+                    <if test="pullUser != null">pull_user = #{pullUser},</if>
+                </otherwise>
+            </choose>
             <if test="updater != null">updater = #{updater},</if>
             update_time = sysdate(),
         </trim>

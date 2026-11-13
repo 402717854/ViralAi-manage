@@ -249,7 +249,8 @@ public class ViralaiaiPullAdapter implements GatewayPullAdapter
         row.setCompletionTokens(completion == null ? 0L : Math.max(completion, 0L));
         row.setTotalTokens(row.getPromptTokens() + row.getCompletionTokens());
         Integer quota = (Integer) GatewayPullSupport.pick(item, "quota");
-        row.setTotalFees(new BigDecimal(quota).divide(new BigDecimal(500000),9, RoundingMode.HALF_UP).multiply(new BigDecimal(7)));
+        row.setTotalFees(null);
+        row.setActualFees(new BigDecimal(quota).divide(new BigDecimal(500000),9, RoundingMode.HALF_UP).multiply(new BigDecimal(7)));
         row.setModelType("LLM");
 
         // 原始计费信息：quota 是中转站的额度单位，不能直接当金额，原样留档供核对

@@ -48,6 +48,9 @@ public class GatewayPullRow
     /**消耗费用**/
     private BigDecimal totalFees;
 
+    /**实际扣费**/
+    private BigDecimal actualFees;
+
     /** 调用状态 0失败 1成功 */
     private int callStatus = 1;
 

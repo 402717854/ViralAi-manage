@@ -59,8 +59,10 @@ public class CrmContractUsage extends BaseEntity
 
     /** 消耗token（冲销为负） */
     private Long totalTokens;
-    /** 消耗金额*/
+    /** 总消耗费用 */
     private BigDecimal totalFees;
+    /** 实际消耗金额（渠道实际扣费口径，可能为空） */
+    private BigDecimal actualFees;
 
     /** 模型基准售价（每千token） */
     private BigDecimal baseSellPrice;

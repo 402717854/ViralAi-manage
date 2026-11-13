@@ -25,12 +25,8 @@ public class GatewayPullAdapterFactory
     /** 已注册的适配器：标识 → 实现 */
     private final Map<String, GatewayPullAdapter> adapters = new LinkedHashMap<>();
 
-    /** 通用适配器，账户未配置协议时使用 */
-    private final GatewayPullAdapter fallback;
-
     public GatewayPullAdapterFactory(List<GatewayPullAdapter> adapterList)
     {
-        GatewayPullAdapter generic = null;
         if (adapterList != null)
         {
             for (GatewayPullAdapter adapter : adapterList)
@@ -40,17 +36,9 @@ public class GatewayPullAdapterFactory
                     continue;
                 }
                 String key = adapter.channel().trim().toLowerCase();
-                if (GenericPullAdapter.CHANNEL.equals(key))
-                {
-                    generic = adapter;
-                }
-                else
-                {
-                    adapters.put(key, adapter);
-                }
+                adapters.put(key, adapter);
             }
         }
-        this.fallback = generic;
     }
 
     /**
@@ -61,13 +49,9 @@ public class GatewayPullAdapterFactory
      */
     public GatewayPullAdapter get(String channel)
     {
-        if (StringUtils.isEmpty(channel) || GenericPullAdapter.CHANNEL.equalsIgnoreCase(channel.trim()))
+        if (StringUtils.isEmpty(channel))
         {
-            if (fallback == null)
-            {
-                throw new ServiceException("未注册通用拉取适配器，请检查 GatewayPullAdapter 实现");
-            }
-            return fallback;
+            throw new ServiceException("未注册通用拉取适配器，请检查 GatewayPullAdapter 实现");
         }
         GatewayPullAdapter adapter = adapters.get(channel.trim().toLowerCase());
         if (adapter == null)
@@ -88,10 +72,9 @@ public class GatewayPullAdapterFactory
     {
         if (StringUtils.isEmpty(channel))
         {
-            return fallback != null;
+            return false;
         }
-        return GenericPullAdapter.CHANNEL.equalsIgnoreCase(channel.trim())
-                || adapters.containsKey(channel.trim().toLowerCase());
+        return adapters.containsKey(channel.trim().toLowerCase());
     }
 
     /**

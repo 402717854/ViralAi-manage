@@ -53,6 +53,20 @@ prepare stmt from @ddl;
 execute stmt;
 deallocate prepare stmt;
 
+-- 拉取方式：1 路由获取（系统按接口自动拉取）2 文件上传（人工上传流水文件，系统不拉取）
+--   存量账户此前只有「路由获取」一条路径，故默认值取 1，并用 update 兜底历史空值
+set @c = (select count(*) from information_schema.columns
+           where table_schema = database() and table_name = 'crm_supplier_account'
+             and column_name = 'pull_type');
+set @ddl = if(@c = 0,
+  'alter table crm_supplier_account add column pull_type int not null default 1 comment ''流水拉取方式 1路由获取 2文件上传'' after type',
+  'select 1');
+prepare stmt from @ddl;
+execute stmt;
+deallocate prepare stmt;
+
+update crm_supplier_account set pull_type = 1 where pull_type is null;
+
 -- ----------------------------
 -- 2、上游标识映射表
 --
@@ -139,7 +153,8 @@ from dual where @map_menu is not null
 --   4.1 viralai 中转站：一个账户对应中转站的一个管理员令牌，
 --       客户的 username 逐个映射到 CRM 客户
 --   update crm_supplier_account
---      set pull_channel = 'viralaiai',
+--      set pull_type    = 1,
+--          pull_channel = 'viralaiai',
 --          pull_url     = 'https://viralaiai.com/api/log/',
 --          pull_user    = 'Mark'
 --    where id = {账户ID};
@@ -152,7 +167,8 @@ from dual where @map_menu is not null
 --   4.2 pixverse：记录没有客户维度，用 upstream_key = '' 表示「该账户的默认客户」，
 --       模型按 型号|清晰度|能力 组合映射（pixverse 有 .ai 与 .cn 两套域名，按地域选）
 --   update crm_supplier_account
---      set pull_channel = 'pixverse',
+--      set pull_type    = 1,
+--          pull_channel = 'pixverse',
 --          pull_url     = 'https://app-api.pixverse.ai/openapi/v2/account/billing/usage-detail'
 --    where id = {账户ID};
 --
@@ -160,14 +176,23 @@ from dual where @map_menu is not null
 --   values
 --     ({渠道ID}, {账户ID}, 'CUSTOMER', '',   '',                     {crm_customer.id}, null, 1, 1, sysdate()),
 --     ({渠道ID}, {账户ID}, 'PRODUCT',  'v6', '720p|text_to_video',   null, 'pixverse-v6-720p-t2v', 1, 1, sysdate());
+--
+--   4.3 文件上传：流水由人工上传文件，系统不参与路由拉取，
+--       三条路由配置可留空（服务端保存时也会自动清空，避免脏数据残留）
+--   update crm_supplier_account
+--      set pull_type    = 2,
+--          pull_channel = null,
+--          pull_url     = null,
+--          pull_user    = null
+--    where id = {账户ID};
 -- ----------------------------
 
 -- ----------------------------
 -- 5、自查
 -- ----------------------------
--- 5.1 已配置拉取协议的账户
+-- 5.1 账户拉取配置总览（pull_type：1路由获取 2文件上传）
 select a.id, a.account_name, a.supplier_id, s.name as supplier_name,
-       a.pull_channel, a.pull_url, a.pull_user, a.status,
+       a.pull_type, a.pull_channel, a.pull_url, a.pull_user, a.status,
        (select count(1) from crm_gateway_pull_map m
          where m.supplier_account_id = a.id and m.map_type = 'CUSTOMER' and m.status = 1) as customer_map_cnt,
        (select count(1) from crm_gateway_pull_map m
@@ -176,11 +201,12 @@ from crm_supplier_account a
 left join crm_supplier s on s.id = a.supplier_id
 order by a.supplier_id, a.id;
 
--- 5.2 已启用但未配拉取协议的账户（这些账户不会被定时任务拉取）
-select a.id, a.account_name, a.supplier_id, s.name as supplier_name
+-- 5.2 路由获取但未配拉取协议的账户（这些账户不会被定时任务拉取）
+select a.id, a.account_name, a.supplier_id, s.name as supplier_name, a.pull_type
 from crm_supplier_account a
 left join crm_supplier s on s.id = a.supplier_id
 where a.status = 1
+  and a.pull_type = 1
   and (a.pull_channel is null or a.pull_channel = '')
 order by a.supplier_id, a.id;
 

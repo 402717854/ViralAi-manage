@@ -79,9 +79,13 @@ public class CrmContractUsageDto extends BaseEntity
     @Excel(name = "token")
     private Long totalTokens;
 
-    /** 消耗费用（网关上报金额快照） */
-    @Excel(name = "消耗费用", scale = 8)
+    /** 消耗费用（网关上报金额快照，业务口径：刊例价费用） */
+    @Excel(name = "刊例价费用", scale = 8)
     private BigDecimal totalFees;
+
+    /** 实际消耗金额（渠道实际扣费口径，业务口径：折后费用，可能为空） */
+    @Excel(name = "折后费用", scale = 8)
+    private BigDecimal actualFees;
 
     /** 模型基准售价（每千token） */
     private BigDecimal baseSellPrice;

@@ -53,6 +53,10 @@ public class CrmSupplierAccountDto extends BaseEntity
     @Excel(name = "账户类型")
     private Integer type;
 
+    /** 流水拉取方式 1路由获取 2文件上传 */
+    @Excel(name = "拉取方式")
+    private Integer pullType;
+
     /** 流水拉取适配器 viralaiai/pixverse，空=通用 */
     @Excel(name = "拉取适配器")
     private String pullChannel;

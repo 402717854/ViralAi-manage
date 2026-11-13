@@ -17,6 +17,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="productCode"       column="product_code"        />
         <result property="totalTokens"       column="total_tokens"        />
         <result property="totalFees"       column="total_fees"        />
+        <result property="actualFees"       column="actual_fees"        />
         <result property="baseSellPrice"     column="base_sell_price"     />
         <result property="sellDiscount"      column="sell_discount"       />
         <result property="sellAmount"        column="sell_amount"         />
@@ -40,7 +41,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                a.supplier_id, s.name as supplier_name,
                a.supplier_account_id, sa.account_name as supplier_account_name,
                a.product_id, a.product_code, mp.no as model_no,
-               a.total_tokens, a.total_fees, a.base_sell_price, a.sell_discount, a.sell_amount,
+               a.total_tokens, a.total_fees, a.actual_fees, a.base_sell_price, a.sell_discount, a.sell_amount,
                a.base_cost_price, a.cost_discount, a.cost_amount, a.gross_profit,
                a.match_status, a.match_msg, a.call_time, a.bill_id, b.bill_no,
                a.usage_type, a.ref_usage_id, a.create_time, a.update_time
@@ -99,7 +100,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectCrmContractUsageEntity" parameterType="Long" resultMap="CrmContractUsageResult">
         select id, call_log_id, call_no, contract_id, contract_product_id, customer_id, supplier_id,
                supplier_account_id,
-               product_id, product_code, total_tokens, total_fees, base_sell_price, sell_discount, sell_amount,
+               product_id, product_code, total_tokens, total_fees, actual_fees, base_sell_price, sell_discount, sell_amount,
                base_cost_price, cost_discount, cost_amount, gross_profit, match_status, match_msg,
                call_time, bill_id, usage_type, ref_usage_id, create_time, update_time
         from crm_contract_usage
@@ -110,13 +111,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into crm_contract_usage (
             call_log_id, call_no, contract_id, contract_product_id, customer_id, supplier_id,
             supplier_account_id,
-            product_id, product_code, total_tokens,total_fees, base_sell_price, sell_discount, sell_amount,
+            product_id, product_code, total_tokens,total_fees,actual_fees, base_sell_price, sell_discount, sell_amount,
             base_cost_price, cost_discount, cost_amount, gross_profit, match_status, match_msg,
             call_time, bill_id, usage_type, ref_usage_id, create_time
         ) values (
             #{callLogId}, #{callNo}, #{contractId}, #{contractProductId}, #{customerId}, #{supplierId},
             ifnull(#{supplierAccountId}, 0),
-            #{productId}, #{productCode}, ifnull(#{totalTokens}, 0), ifnull(#{totalFees}, 0), #{baseSellPrice}, #{sellDiscount}, #{sellAmount},
+            #{productId}, #{productCode}, ifnull(#{totalTokens}, 0), ifnull(#{totalFees}, 0), ifnull(#{actualFees}, 0), #{baseSellPrice}, #{sellDiscount}, #{sellAmount},
             #{baseCostPrice}, #{costDiscount}, #{costAmount}, #{grossProfit}, #{matchStatus}, #{matchMsg},
             #{callTime}, #{billId}, ifnull(#{usageType}, 0), #{refUsageId}, ifnull(#{createTime}, sysdate())
         )
@@ -131,6 +132,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             product_id          = #{productId},
             total_tokens        = ifnull(#{totalTokens}, total_tokens),
             total_fees          = ifnull(#{totalFees}, total_fees),
+            actual_fees         = ifnull(#{actualFees}, actual_fees),
             base_sell_price     = #{baseSellPrice},
             sell_discount       = #{sellDiscount},
             sell_amount         = #{sellAmount},
@@ -148,7 +150,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectRematchUsages" resultMap="CrmContractUsageResult">
         select id, call_log_id, call_no, contract_id, contract_product_id, customer_id, supplier_id,
                supplier_account_id,
-               product_id, product_code, total_tokens, total_fees, base_sell_price, sell_discount, sell_amount,
+               product_id, product_code, total_tokens, total_fees, actual_fees, base_sell_price, sell_discount, sell_amount,
                base_cost_price, cost_discount, cost_amount, gross_profit, match_status, match_msg,
                call_time, bill_id, usage_type, ref_usage_id, create_time, update_time
         from crm_contract_usage

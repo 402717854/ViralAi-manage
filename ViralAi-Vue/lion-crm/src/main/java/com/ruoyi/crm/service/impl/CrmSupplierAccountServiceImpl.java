@@ -42,6 +42,12 @@ public class CrmSupplierAccountServiceImpl implements ICrmSupplierAccountService
     /** 拉取用户名最大长度 */
     private static final int MAX_PULL_USER = 100;
 
+    /** 流水拉取方式：1 路由获取（系统调接口自动拉取） */
+    private static final Integer PULL_TYPE_ROUTE = 1;
+
+    /** 流水拉取方式：2 文件上传（人工上传流水文件，系统不拉取） */
+    private static final Integer PULL_TYPE_UPLOAD = 2;
+
     @Autowired
     private CrmSupplierAccountMapper crmSupplierAccountMapper;
 
@@ -92,7 +98,7 @@ public class CrmSupplierAccountServiceImpl implements ICrmSupplierAccountService
         {
             throw new ServiceException("请求参数不能为空");
         }
-        validateAccount(crmSupplierAccount, null);
+        validateAccount(crmSupplierAccount, null, null);
         if (StringUtils.isEmpty(crmSupplierAccount.getApiKey()))
         {
             throw new ServiceException("apiKey 不能为空");
@@ -134,19 +140,21 @@ public class CrmSupplierAccountServiceImpl implements ICrmSupplierAccountService
         {
             throw new ServiceException("渠道账户不存在或已被删除");
         }
-        validateAccount(crmSupplierAccount, crmSupplierAccount.getId());
+        validateAccount(crmSupplierAccount, crmSupplierAccount.getId(), exist);
         // 密码留空表示保持原密码不变，由 XML 的判空条件保证
         crmSupplierAccount.setUpdater(SecurityUtils.getUserId());
         return crmSupplierAccountMapper.updateCrmSupplierAccount(crmSupplierAccount);
     }
 
     /**
-     * 公共校验：账户名、渠道、类型、状态与账户名唯一性
+     * 公共校验：账户名、渠道、类型、状态、拉取配置与账户名唯一性
      *
      * @param account 账户信息
      * @param excludeId 修改时排除自身，新增传 null
+     * @param exist 修改前的账户（含完整拉取配置），新增传 null；
+     *              用于「未传拉取字段视为保持不变」的兼容判断
      */
-    private void validateAccount(CrmSupplierAccount account, Long excludeId)
+    private void validateAccount(CrmSupplierAccount account, Long excludeId, CrmSupplierAccountDto exist)
     {
         String accountName = StringUtils.trim(account.getAccountName());
         if (StringUtils.isEmpty(accountName))
@@ -204,32 +212,84 @@ public class CrmSupplierAccountServiceImpl implements ICrmSupplierAccountService
             throw new ServiceException("该供应商下已存在同名账户：" + accountName);
         }
 
-        validatePullConfig(account);
+        validatePullConfig(account, exist);
     }
 
     /**
      * 校验并规范化流水拉取配置
      *
-     * <p>空串统一存 NULL（与其它「未填写」字段口径一致）；配了协议就必须是已注册的适配器，
-     * 否则等到定时任务跑起来才发现配错，表现为「一条也拉不到」。</p>
+     * <p>拉取方式分两种，必填项不同：</p>
+     * <ul>
+     *   <li>1 路由获取：系统按接口自动拉取，拉取协议（pull_channel）与拉取地址（pull_url）
+     *       必须填写。留空并不会「自动落到默认地址」，GatewayPullAdapterFactory 取不到
+     *       适配器会直接抛错，定时任务表现为一条也拉不到，因此前置拦截。</li>
+     *   <li>2 文件上传：流水由人工上传文件，服务器不参与路由拉取，三条路由配置统一清空，
+     *       避免残留地址在回切路由获取时把数据拉到错误的上游。</li>
+     * </ul>
+     *
+     * <p>空串统一存 NULL（与其它「未填写」字段口径一致）。</p>
      *
      * @param account 账户
+     * @param exist 修改前的账户，新增传 null
      */
-    private void validatePullConfig(CrmSupplierAccount account)
+    private void validatePullConfig(CrmSupplierAccount account, CrmSupplierAccountDto exist)
     {
-        account.setPullChannel(StringUtils.isEmpty(account.getPullChannel())
-                ? null : account.getPullChannel().trim());
-        account.setPullUrl(StringUtils.isEmpty(account.getPullUrl()) ? null : account.getPullUrl().trim());
-        account.setPullUser(StringUtils.isEmpty(account.getPullUser()) ? null : account.getPullUser().trim());
-
-        if (account.getPullChannel() != null && !gatewayPullAdapterFactory.supports(account.getPullChannel()))
+        // 未传拉取方式时沿用原值，新增默认「路由获取」，兼容历史接口调用方
+        if (account.getPullType() == null)
         {
-            throw new ServiceException("不支持的拉取适配器：" + account.getPullChannel()
+            Integer original = exist == null ? null : exist.getPullType();
+            account.setPullType(original == null ? PULL_TYPE_ROUTE : original);
+        }
+        if (!PULL_TYPE_ROUTE.equals(account.getPullType()) && !PULL_TYPE_UPLOAD.equals(account.getPullType()))
+        {
+            throw new ServiceException("流水拉取方式只能是 1（路由获取）或 2（文件上传）");
+        }
+
+        String channel = StringUtils.trim(account.getPullChannel());
+        String url = StringUtils.trim(account.getPullUrl());
+        String user = StringUtils.trim(account.getPullUser());
+        account.setPullChannel(StringUtils.isEmpty(channel) ? null : channel);
+        account.setPullUrl(StringUtils.isEmpty(url) ? null : url);
+        account.setPullUser(StringUtils.isEmpty(user) ? null : user);
+
+        if (PULL_TYPE_UPLOAD.equals(account.getPullType()))
+        {
+            // 文件上传不参与路由拉取，路由配置一律清空（XML 中会显式置 NULL）
+            account.setPullChannel(null);
+            account.setPullUrl(null);
+            account.setPullUser(null);
+            return;
+        }
+
+        // 修改时未传的字段视为保持原值，避免接口调用方漏传导致校验误报
+        String effectiveChannel = account.getPullChannel() != null
+                ? account.getPullChannel() : (exist == null ? null : exist.getPullChannel());
+        String effectiveUrl = account.getPullUrl() != null
+                ? account.getPullUrl() : (exist == null ? null : exist.getPullUrl());
+
+        if (StringUtils.isEmpty(effectiveChannel))
+        {
+            throw new ServiceException("拉取方式为路由获取时，拉取协议（pull_channel）不能为空");
+        }
+        if (!gatewayPullAdapterFactory.supports(effectiveChannel))
+        {
+            throw new ServiceException("不支持的拉取适配器：" + effectiveChannel
                     + "，可选值：" + String.join(" / ", gatewayPullAdapterFactory.channels()));
         }
-        if (account.getPullUrl() != null && account.getPullUrl().length() > MAX_PULL_URL)
+        if (StringUtils.isEmpty(effectiveUrl))
         {
-            throw new ServiceException("拉取地址长度不能超过 " + MAX_PULL_URL + " 个字符");
+            throw new ServiceException("拉取方式为路由获取时，拉取地址（pull_url）不能为空");
+        }
+        if (account.getPullUrl() != null)
+        {
+            if (account.getPullUrl().length() > MAX_PULL_URL)
+            {
+                throw new ServiceException("拉取地址长度不能超过 " + MAX_PULL_URL + " 个字符");
+            }
+            if (!account.getPullUrl().startsWith("http://") && !account.getPullUrl().startsWith("https://"))
+            {
+                throw new ServiceException("拉取地址必须以 http:// 或 https:// 开头");
+            }
         }
         if (account.getPullUser() != null && account.getPullUser().length() > MAX_PULL_USER)
         {

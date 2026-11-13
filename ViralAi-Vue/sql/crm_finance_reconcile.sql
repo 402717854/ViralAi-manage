@@ -30,6 +30,7 @@ create table if not exists gateway_call_log (
   completion_tokens bigint(20)    not null default 0                 comment '输出token',
   total_tokens      bigint(20)    not null default 0                 comment '总token',
   total_fees        decimal(20,8) not null default 0                 comment '总消耗费用',
+  actual_fees       decimal(10,8) default null                       comment '实际消耗金额',
   call_time         datetime      not null                           comment '调用发生时间（计费归属时间）',
   call_status       tinyint(4)    not null default 1                 comment '调用状态 0失败 1成功',
   err_msg           varchar(500)  default null                       comment '失败原因',
@@ -60,6 +61,7 @@ create table if not exists crm_contract_usage (
   product_code        varchar(64)     not null                                  comment '模型编码',
   total_tokens        bigint(20)      not null default 0                        comment '消耗token（冲销为负）',
   total_fees          decimal(20,8)   not null default 0                        comment '总消耗费用（网关上报快照，冲销为负）',
+  actual_fees         decimal(10,8)   default null                              comment '实际消耗金额',
   base_sell_price     decimal(20,8)   default null                              comment '模型基准售价（每千token）',
   sell_discount       decimal(10,2)   default null                              comment '合同售卖折扣',
   sell_amount         decimal(20,8)   default null                              comment '本次向客户应收金额',
@@ -173,6 +175,14 @@ call crm_add_column_if_missing('gateway_call_log', 'total_fees',
   '`total_fees` decimal(16,6) not null default 0 comment ''总消耗费用'' after `total_tokens`');
 call crm_add_column_if_missing('crm_contract_usage', 'total_fees',
   '`total_fees` decimal(16,6) not null default 0 comment ''总消耗费用（网关上报快照，冲销为负）'' after `total_tokens`');
+
+-- 实际消耗金额：上游渠道实际扣费口径，与总消耗费用并列展示；允许为空（历史流水无此数据）
+-- 注意：decimal(10,8) 有效整数位仅 2 位，单条金额上限 99.99999999；若需承载百元以上金额，
+--       请将下列 DDL 一并改为 decimal(20,8) 后再执行
+call crm_add_column_if_missing('gateway_call_log', 'actual_fees',
+  '`actual_fees` decimal(10,8) default null comment ''实际消耗金额'' after `total_fees`');
+call crm_add_column_if_missing('crm_contract_usage', 'actual_fees',
+  '`actual_fees` decimal(10,8) default null comment ''实际消耗金额'' after `total_fees`');
 
 drop procedure if exists crm_add_column_if_missing;
 

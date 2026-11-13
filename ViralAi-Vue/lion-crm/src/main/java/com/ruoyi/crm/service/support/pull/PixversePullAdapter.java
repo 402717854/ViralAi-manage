@@ -230,7 +230,8 @@ public class PixversePullAdapter implements GatewayPullAdapter
         row.setPromptTokens(0L);
         row.setCompletionTokens(0L);
         row.setTotalTokens(0L);
-        row.setTotalFees(BigDecimal.ZERO);
+        row.setTotalFees(null);
+        row.setActualFees(null);
         int credits=(int)GatewayPullSupport.pick(item, "credits");
         if(credits<0){
             row.setTotalTokens(0L-credits);

@@ -33,7 +33,6 @@ import com.ruoyi.crm.service.support.pull.GatewayPullMapping;
 import com.ruoyi.crm.service.support.pull.GatewayPullMappingLoader;
 import com.ruoyi.crm.service.support.pull.GatewayPullRow;
 import com.ruoyi.crm.service.support.pull.GatewayPullSupport;
-import com.ruoyi.crm.service.support.pull.GenericPullAdapter;
 
 /**
  * 网关调用流水Service实现
@@ -65,6 +64,9 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
 
     /** 未映射用户名样例上限，避免一次拉取把几万个用户名塞进响应 */
     private static final int MAX_UNMAPPED_SAMPLE = 20;
+
+    /** 流水拉取方式：2 文件上传（人工上传流水文件，不参与路由拉取） */
+    private static final Integer PULL_TYPE_UPLOAD = 2;
 
     @Autowired
     private GatewayCallLogMapper gatewayCallLogMapper;
@@ -189,6 +191,8 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
         int unmapped = 0;
         int missingModel = 0;
         int failed = 0;
+        // 拉取方式为「文件上传」的账户不参与路由拉取，单独计数，避免被误判为拉取失败
+        int skipped = 0;
 
         for (CrmSupplierAccount account : accounts)
         {
@@ -196,8 +200,16 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
             one.put("accountId", account.getId());
             one.put("accountName", account.getAccountName());
             one.put("supplierId", account.getSupplierId());
-            one.put("pullChannel", StringUtils.isEmpty(account.getPullChannel())
-                    ? GenericPullAdapter.CHANNEL : account.getPullChannel());
+            one.put("pullType", account.getPullType());
+            one.put("pullChannel", account.getPullChannel());
+            if (PULL_TYPE_UPLOAD.equals(account.getPullType()))
+            {
+                skipped++;
+                one.put("skipped", true);
+                one.put("reason", "拉取方式为文件上传，跳过路由拉取");
+                accountResults.add(one);
+                continue;
+            }
             try
             {
                 GatewayPullAdapter adapter = gatewayPullAdapterFactory.get(account.getPullChannel());
@@ -264,10 +276,26 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
             accountResults.add(one);
         }
 
-        if (failed > 0 && failed == accounts.size())
+        int attempted = accounts.size() - skipped;
+        if (attempted == 0)
         {
-            throw new ServiceException("全部渠道账户拉取失败，请检查密钥与接口地址，首个错误："
-                    + accountResults.get(0).get("error"));
+            // 全部为文件上传账户：不存在可路由拉取的账户，直接给出结论而不是「成功 0 条」
+            throw new ServiceException("所选范围内没有采用「路由获取」方式的渠道账户，"
+                    + "文件上传方式的账户由人工上传流水文件，不参与路由拉取");
+        }
+        if (failed > 0 && failed == attempted)
+        {
+            // 首个账户可能被跳过而没有 error，需取第一个真正失败的明细
+            Object firstError = null;
+            for (Map<String, Object> item : accountResults)
+            {
+                if (item.get("error") != null)
+                {
+                    firstError = item.get("error");
+                    break;
+                }
+            }
+            throw new ServiceException("全部渠道账户拉取失败，请检查密钥与接口地址，首个错误：" + firstError);
         }
 
         Map<String, Object> result = ingest(logs);
@@ -276,12 +304,13 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
         result.put("unmappedSample", new ArrayList<>(unmappedUsers));
         result.put("missingModel", missingModel);
         result.put("missingModelSample", new ArrayList<>(missingModels));
+        result.put("skipped", skipped);
         result.put("accounts", accountResults);
         result.put("startTime", start);
         result.put("endTime", end);
-        log.info("流水拉取完成，区间 {} ~ {}，账户 {} 个（失败 {} 个），拉取 {} 条，未映射客户 {} 条，"
+        log.info("流水拉取完成，区间 {} ~ {}，账户 {} 个（失败 {} 个、文件上传跳过 {} 个），拉取 {} 条，未映射客户 {} 条，"
                         + "缺模型编码 {} 条，入库 {} 条 / 重复 {} 条",
-                start, end, accounts.size(), failed, result.get("pulled"), unmapped, missingModel,
+                start, end, accounts.size(), failed, skipped, result.get("pulled"), unmapped, missingModel,
                 result.get("inserted"), result.get("duplicated"));
         return result;
     }
@@ -321,7 +350,7 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
      */
     private String callNoPrefix(GatewayPullAdapter adapter)
     {
-        if (adapter == null || GenericPullAdapter.CHANNEL.equals(adapter.channel()))
+        if (adapter == null)
         {
             return "";
         }
@@ -375,6 +404,7 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
         item.setCompletionTokens(row.getCompletionTokens());
         item.setTotalTokens(row.getTotalTokens());
         item.setTotalFees(row.getTotalFees());
+        item.setActualFees(row.getActualFees());
         item.setCallTime(row.getCallTime());
         item.setCallStatus(row.getCallStatus());
         item.setErrMsg(GatewayPullSupport.truncate(row.getErrMsg(), MAX_ERR_MSG));

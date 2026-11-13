@@ -44,6 +44,13 @@ public class CrmSupplierAccount extends BaseEntity
     private Integer type;
 
     /**
+     * 流水拉取方式：1 路由获取（系统调用接口自动拉取）2 文件上传（人工上传流水文件）
+     * <p>两种方式是互斥的：文件上传的账户不参与定时路由拉取，因此 pullChannel/pullUrl/pullUser
+     * 仅在该值为 1 时有意义，切换为 2 时由服务端清空，避免残留配置造成误解。</p>
+     */
+    private Integer pullType;
+
+    /**
      * 流水拉取适配器：viralaiai / pixverse，为空表示走通用 HTTP 拉取（crm.gateway.pull-url）
      * <p>一个账户对应一套密钥与一种上游协议，因此拉取方式挂在账户上而不是渠道上
      * （同一渠道可能同时存在测试账户与真实账户，两者上游地址不同）。</p>

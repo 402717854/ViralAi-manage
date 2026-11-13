@@ -376,6 +376,7 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
         reverse.setTotalTokens(-originTokens);
         // 消耗费用随冲销取负，保持与 token 的符号一致
         reverse.setTotalFees(nullToZero(origin.getTotalFees()).negate());
+        reverse.setActualFees(nullToZero(origin.getActualFees()).negate());
         reverse.setBaseSellPrice(origin.getBaseSellPrice());
         reverse.setSellDiscount(origin.getSellDiscount());
         reverse.setBaseCostPrice(origin.getBaseCostPrice());

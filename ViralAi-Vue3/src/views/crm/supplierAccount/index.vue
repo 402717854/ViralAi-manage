@@ -84,12 +84,19 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="拉取方式" align="center" prop="pullType" width="110">
+        <template #default="scope">
+          <el-tag :type="scope.row.pullType === 2 ? 'info' : 'success'" effect="plain">
+            {{ pullTypeLabel(scope.row.pullType) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="拉取协议" align="center" prop="pullChannel" width="120">
         <template #default="scope">
           <el-tag v-if="scope.row.pullChannel" type="warning" effect="plain">
             {{ scope.row.pullChannel }}
           </el-tag>
-          <span v-else>通用</span>
+          <span v-else>-</span>
         </template>
       </el-table-column>
       <el-table-column label="状态" align="center" prop="status" width="100">
@@ -183,36 +190,66 @@
           </el-radio-group>
         </el-form-item>
         <el-divider content-position="left">流水拉取</el-divider>
-        <el-form-item label="拉取协议" prop="pullChannel">
-          <el-select v-model="form.pullChannel" placeholder="不配置则走通用拉取地址" clearable style="width: 100%">
-            <el-option v-for="item in pullChannelOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
+        <el-form-item label="拉取方式" prop="pullType">
+          <el-radio-group v-model="form.pullType" @change="handlePullTypeChange">
+            <el-radio v-for="item in pullTypeOptions" :key="item.value" :value="item.value">
+              {{ item.label }}
+            </el-radio>
+          </el-radio-group>
           <div class="form-tip">
-            账户拉取协议决定接口形态：viralai 中转站为 GET + Bearer 令牌 + 页码分页；
-            pixverse 为 POST + API-KEY 头 + 游标分页，且单次区间不超过 30 天。
+            路由获取：系统按接口地址自动拉取流水；文件上传：流水由人工上传文件，系统不自动拉取。
           </div>
         </el-form-item>
-        <el-form-item label="拉取地址" prop="pullUrl">
-          <el-input
-            v-model="form.pullUrl"
-            placeholder="留空使用该协议的默认地址"
-            maxlength="255"
-            clearable
-          />
-          <div class="form-tip">
-            pixverse 有 .ai（国际）与 .cn（国内）两套域名，API Key 必须与域名同地域；
-            自建中转站也在这里覆盖。
-          </div>
-        </el-form-item>
-        <el-form-item label="拉取用户名" prop="pullUser">
-          <el-input
-            v-model="form.pullUser"
-            placeholder="留空则拉取全量（不按上游用户名过滤）"
-            maxlength="100"
-            clearable
-          />
-          <div class="form-tip">仅 viralai 中转站的 /api/log/ 支持按 username 过滤。</div>
-        </el-form-item>
+        <template v-if="form.pullType !== 2">
+          <el-form-item label="拉取协议" prop="pullChannel">
+            <el-select
+              v-model="form.pullChannel"
+              placeholder="请选择拉取协议"
+              clearable
+              style="width: 100%"
+              @change="handlePullChannelChange"
+            >
+              <el-option v-for="item in pullChannelOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+            <div class="form-tip">
+              账户拉取协议决定接口形态：viralai 中转站为 GET + Bearer 令牌 + 页码分页；
+              pixverse 为 POST + API-KEY 头 + 游标分页，且单次区间不超过 30 天。
+            </div>
+          </el-form-item>
+          <el-form-item label="拉取地址" prop="pullUrl">
+            <el-input
+              v-model="form.pullUrl"
+              placeholder="选择拉取协议后自动带出默认地址，自建中转站可直接覆盖"
+              maxlength="255"
+              clearable
+            />
+            <div class="form-tip">
+              pixverse 有 .ai（国际）与 .cn（国内）两套域名，API Key 必须与域名同地域；
+              自建中转站也在这里覆盖。
+            </div>
+          </el-form-item>
+          <el-form-item label="拉取用户名" prop="pullUser">
+            <el-input
+              v-model="form.pullUser"
+              placeholder="上游账号的用户名，用于拉取该客户的流水"
+              maxlength="100"
+              clearable
+            />
+            <div class="form-tip">
+              仅 viralai 中转站的 /api/log/ 支持按 username 过滤；pixverse 记录没有客户维度，
+              该协议下可留空。
+            </div>
+          </el-form-item>
+        </template>
+        <el-alert
+          v-else
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 18px"
+          title="文件上传方式不参与路由拉取"
+          description="该账户的流水由人工上传文件，系统不会自动调用上游接口；拉取协议、地址与用户名无需填写，保存时会自动清空。"
+        />
       </el-form>
       <template #footer>
         <div class="dialog-footer">
@@ -260,12 +297,45 @@ const statusOptions = [
 
 /**
  * 流水拉取协议
- * <p>与后端 GatewayPullAdapter 的 channel() 一一对应；不选则走通用拉取地址</p>
+ * <p>与后端 GatewayPullAdapter 的 channel() 一一对应；路由获取方式下必选</p>
  */
 const pullChannelOptions = [
   { label: "viralai 中转站", value: "viralaiai" },
   { label: "pixverse", value: "pixverse" }
 ]
+
+/**
+ * 流水拉取方式
+ * <p>与后端 crm_supplier_account.pull_type 一致：1 路由获取 2 文件上传。
+ * 两种方式互斥，只有路由获取需要维护接口地址等配置</p>
+ */
+const pullTypeOptions = [
+  { label: "路由获取", value: 1 },
+  { label: "文件上传", value: 2 }
+]
+
+/** 各协议的默认接口地址：切换协议时自动带出，避免每次手填 */
+const PULL_CHANNEL_DEFAULT_URL = {
+  viralaiai: "https://viralaiai.com/api/log/",
+  pixverse: "https://app-api.pixverse.ai/openapi/v2/account/billing/usage-detail"
+}
+
+/** 切换拉取协议：地址为空时补默认值，已手填的地址不覆盖 */
+function handlePullChannelChange(value) {
+  if (value && !form.value.pullUrl) {
+    form.value.pullUrl = PULL_CHANNEL_DEFAULT_URL[value] || ""
+  }
+}
+
+/** 切换拉取方式：清掉另一分支的校验痕迹，避免隐藏字段残留红字 */
+function handlePullTypeChange() {
+  proxy.$nextTick(() => {
+    const formRef = proxy.$refs["accountRef"]
+    if (formRef) {
+      formRef.clearValidate(["pullChannel", "pullUrl", "pullUser"])
+    }
+  })
+}
 
 const data = reactive({
   form: {},
@@ -277,17 +347,44 @@ const data = reactive({
     supplierId: undefined,
     type: undefined,
     status: undefined
-  },
-  rules: {
+  }
+})
+
+const { queryParams, form } = toRefs(data)
+
+/**
+ * 表单校验规则
+ * <p>拉取相关字段随「拉取方式」动态变化：文件上传时只需人工上传文件，
+ * 接口配置不展示也不校验，因此返回空数组避免隐藏字段拦截提交</p>
+ */
+const rules = computed(() => {
+  const routeMode = form.value.pullType !== 2
+  return {
     supplierId: [{ required: true, message: "请选择供应商", trigger: "change" }],
     accountName: [{ required: true, message: "账户名不能为空", trigger: "blur" }],
     apiKey: [{ required: true, message: "apiKey 不能为空", trigger: "blur" }],
     type: [{ required: true, message: "请选择账户类型", trigger: "change" }],
-    status: [{ required: true, message: "请选择状态", trigger: "change" }]
+    status: [{ required: true, message: "请选择状态", trigger: "change" }],
+    pullType: [{ required: true, message: "请选择流水拉取方式", trigger: "change" }],
+    pullChannel: routeMode
+      ? [{ required: true, message: "路由获取必须选择拉取协议", trigger: "change" }]
+      : [],
+    pullUrl: routeMode
+      ? [
+          { required: true, message: "路由获取必须填写拉取地址", trigger: "blur" },
+          {
+            pattern: /^https?:\/\//,
+            message: "拉取地址必须以 http:// 或 https:// 开头",
+            trigger: "blur"
+          }
+        ]
+      : [],
+    // pixverse 的记录没有客户维度，该协议下用户名可留空
+    pullUser: routeMode && form.value.pullChannel !== "pixverse"
+      ? [{ required: true, message: "路由获取必须填写拉取用户名", trigger: "blur" }]
+      : []
   }
 })
-
-const { queryParams, form, rules } = toRefs(data)
 
 /**
  * 编辑表单的供应商选项
@@ -315,6 +412,12 @@ function typeLabel(value) {
 /** 状态文案 */
 function statusLabel(value) {
   const hit = statusOptions.find(item => item.value === value)
+  return hit ? hit.label : "-"
+}
+
+/** 拉取方式文案：历史数据无值时按路由获取展示（与库默认值一致） */
+function pullTypeLabel(value) {
+  const hit = pullTypeOptions.find(item => item.value === (value === null || value === undefined ? 1 : value))
   return hit ? hit.label : "-"
 }
 
@@ -366,6 +469,7 @@ function reset() {
     apiKey: undefined,
     type: 2,
     status: 1,
+    pullType: 1,
     pullChannel: undefined,
     pullUrl: undefined,
     pullUser: undefined
@@ -388,6 +492,11 @@ function handleUpdate(row) {
     const data = response.data || {}
     form.value = {
       ...data,
+      // 历史数据 pull_type 为空时按路由获取回显，与库默认值一致
+      pullType: data.pullType === null || data.pullType === undefined ? 1 : data.pullType,
+      pullChannel: data.pullChannel || undefined,
+      pullUrl: data.pullUrl || undefined,
+      pullUser: data.pullUser || undefined,
       // 密码不返回明文，留空即保持不变
       accountPwd: ""
     }
@@ -404,6 +513,7 @@ function submitForm() {
     }
     submitting.value = true
     // 只提交可写字段，避免把详情里的 creatorName / createTime 等只读字段回传
+    const isUpload = form.value.pullType === 2
     const payload = {
       id: form.value.id,
       supplierId: form.value.supplierId,
@@ -412,7 +522,12 @@ function submitForm() {
       apiKeyNo: form.value.apiKeyNo,
       apiKey: form.value.apiKey,
       type: form.value.type,
-      status: form.value.status
+      status: form.value.status,
+      pullType: form.value.pullType,
+      // 文件上传方式不带路由配置：服务端会统一置 NULL，避免上次的地址残留
+      pullChannel: isUpload ? undefined : form.value.pullChannel,
+      pullUrl: isUpload ? undefined : form.value.pullUrl,
+      pullUser: isUpload ? undefined : form.value.pullUser
     }
     const submit = payload.id ? updateSupplierAccount : addSupplierAccount
     submit(payload).then(() => {

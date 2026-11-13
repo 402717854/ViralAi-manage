@@ -92,6 +92,7 @@ public class CrmUsageMatchEngine
         usage.setProductId(product.getId());
 
         Long accountId = normalizeAccountId(usage.getSupplierAccountId());
+        //获取模型+渠道+渠道账户+合同  对应一条行数据
         List<CrmMatchProductDto> candidates = crmContractUsageMapper.selectMatchContractProducts(
                 usage.getCustomerId(), usage.getSupplierId(), accountId, product.getId(), usage.getCallTime());
         if (candidates.size() > 1)
@@ -132,14 +133,24 @@ public class CrmUsageMatchEngine
 //            return fail(usage, UsageMatchStatusEnum.OTHER_ERROR,
 //                    "模型基准价缺失，请在模型产品中维护：" + usage.getProductCode());
 //        }
-
-        BigDecimal sellAmount = usage.getTotalFees()
-                .multiply(hit.getSellDiscount())
-                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-        BigDecimal costAmount = usage.getTotalFees()
+        // actual_fees 允许为空（历史流水未上报该口径），统一按 0 参与计算，避免空指针
+        BigDecimal actualFees = usage.getActualFees() == null ? BigDecimal.ZERO : usage.getActualFees();
+        BigDecimal sellAmount = actualFees;//售价
+        BigDecimal costAmount =BigDecimal.ZERO;//成本价
+        BigDecimal totalFees = usage.getTotalFees() == null ? BigDecimal.ZERO : usage.getTotalFees();
+        if(totalFees.compareTo(BigDecimal.ZERO)>0){
+            sellAmount = totalFees
+                    .multiply(hit.getSellDiscount())
+                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+            usage.setActualFees(sellAmount);
+        }else if(actualFees.compareTo(BigDecimal.ZERO)>0){
+            totalFees = actualFees
+                    .divide(hit.getSellDiscount(),AMOUNT_SCALE,RoundingMode.HALF_UP);
+            usage.setTotalFees(totalFees);
+        }
+        costAmount = totalFees
                 .multiply(hit.getCostDiscount())
                 .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-
         usage.setContractId(hit.getContractId());
         usage.setContractProductId(hit.getContractProductId());
         if (accountId == null)
@@ -313,12 +324,14 @@ public class CrmUsageMatchEngine
      * @param supplierAccountId 渠道账户ID
      * @param productCode 模型编码
      * @param totalTokens token
+     * @param totalFees 总消耗费用
+     * @param actualFees 实际消耗费用
      * @param callTime 调用时间
      * @return 台账
      */
     public CrmContractUsage buildFromCallLog(Long callLogId, String callNo, Long customerId, Long supplierId,
                                              Long supplierAccountId, String productCode, Long totalTokens,
-                                             BigDecimal totalFees,Date callTime)
+                                             BigDecimal totalFees,BigDecimal actualFees,Date callTime)
     {
         CrmContractUsage usage = new CrmContractUsage();
         usage.setCallLogId(callLogId);
@@ -329,6 +342,8 @@ public class CrmUsageMatchEngine
         usage.setProductCode(productCode);
         usage.setTotalTokens(totalTokens == null ? 0L : totalTokens);
         usage.setTotalFees(totalFees == null ? BigDecimal.ZERO : totalFees);
+        usage.setActualFees(actualFees == null ? BigDecimal.ZERO : actualFees);
+        usage.setSellAmount(actualFees == null ? BigDecimal.ZERO : actualFees);
         usage.setCallTime(callTime);
         usage.setMatchStatus(UsageMatchStatusEnum.PENDING.getCode());
         usage.setUsageType(0);
