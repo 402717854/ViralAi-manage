@@ -1,5 +1,6 @@
 package com.ruoyi.crm.service.impl;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -22,6 +23,7 @@ import com.ruoyi.crm.dto.CrmContractDto;
 import com.ruoyi.crm.dto.CrmContractInitVo;
 import com.ruoyi.crm.dto.CrmContractProductDto;
 import com.ruoyi.crm.dto.CrmContractVo;
+import com.ruoyi.crm.dto.CrmCustomerSupplierAccountVo;
 import com.ruoyi.crm.enums.BusStatusEnum;
 import com.ruoyi.crm.enums.BusinessActionEnum;
 import com.ruoyi.crm.enums.ContractActionEnum;
@@ -459,6 +461,16 @@ public class CrmContractServiceImpl implements ICrmContractService
             }
         }
         return count;
+    }
+
+    @Override
+    public List<CrmCustomerSupplierAccountVo> selectCustomerSupplierAccounts(Long customerId)
+    {
+        if (customerId == null)
+        {
+            return new ArrayList<>();
+        }
+        return crmContractProductMapper.selectSupplierAccountsByCustomer(customerId);
     }
 
     /**

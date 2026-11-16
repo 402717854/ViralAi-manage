@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -115,10 +116,11 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
         {
             throw new ServiceException("合同状态数据异常，无法维护模型明细");
         }
-        if (!status.isEditable())
+        boolean signed = status == ContractStatusEnum.SIGNED;
+        if (!status.isProductEditable())
         {
-            throw new ServiceException(StringUtils.format("合同当前为【{}】状态，仅草稿状态允许维护模型明细",
-                    status.getInfo()));
+            throw new ServiceException(StringUtils.format(
+                    "合同当前为【{}】状态，仅草稿或已签约状态允许维护模型明细", status.getInfo()));
         }
 
         Long consumerId = contract.getConsumerId();
@@ -129,19 +131,35 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
 
         Long userId = SecurityUtils.getUserId();
         Date now = DateUtils.getNowDate();
-        List<CrmContractProduct> entities = buildEntities(contractId, consumerId, list, userId, now);
-
-        // 全量替换：先清空再写入，保证明细与提交内容一致
-        crmContractProductMapper.deleteContractProductByContractId(contractId);
-        int rows = 0;
-        if (!entities.isEmpty())
+        List<CrmContractProductDto> existing = crmContractProductMapper.selectContractProductList(contractId);
+        // 已签约合同的既有行可能引用已下线模型或已失效账户，仅对新增行做可用性强校验；
+        // 草稿态保持原有强校验口径不变
+        Map<String, CrmContractProductDto> retainedMap = new HashMap<>();
+        if (signed)
         {
-            rows = crmContractProductMapper.batchInsertContractProduct(entities);
+            for (CrmContractProductDto old : existing)
+            {
+                retainedMap.put(productKey(old.getSupplierId(), old.getProductId()), old);
+            }
+        }
+        List<CrmContractProduct> entities = buildEntities(contractId, consumerId, list, userId, now, retainedMap);
+        if (signed && entities.isEmpty())
+        {
+            throw new ServiceException("已签约合同的模型明细不能为空，请至少保留一条");
         }
 
-        writeLog(contractId, contract.getStatus(), contract.getStatus(),
-                StringUtils.format("维护模型明细，共 {} 条", entities.size()));
-        return rows;
+        // 增量对齐：按「渠道 + 模型」比对既有明细，保留明细主键，
+        // 避免对账台账 crm_contract_usage.contract_product_id 因全量替换而悬空
+        SaveStat stat = saveIncremental(contractId, existing, entities);
+
+        String content = StringUtils.format("维护模型明细，共 {} 条（新增 {} 条，更新 {} 条，删除 {} 条）",
+                entities.size(), stat.inserted, stat.updated, stat.removed);
+        if (signed)
+        {
+            content = "已签约合同变更明细：" + content;
+        }
+        writeLog(contractId, contract.getStatus(), contract.getStatus(), content);
+        return entities.size();
     }
 
     @Override
@@ -165,9 +183,17 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
         crmContractDataScope.assertViewable(contract);
 
         ContractStatusEnum status = ContractStatusEnum.of(contract.getStatus());
-        if (status == null || !status.isEditable())
+        if (status == null || !status.isProductEditable())
         {
-            throw new ServiceException("仅草稿状态的合同允许删除模型明细");
+            throw new ServiceException(StringUtils.format(
+                    "合同当前为【{}】状态，仅草稿或已签约状态允许删除模型明细",
+                    status == null ? "未知" : status.getInfo()));
+        }
+        // 已签约合同需保留至少一条明细，否则后续对账无可用折扣基准
+        if (status == ContractStatusEnum.SIGNED
+                && crmContractProductMapper.countContractProductByContractId(contract.getId()) <= 1)
+        {
+            throw new ServiceException("已签约合同的模型明细不能为空，请至少保留一条");
         }
 
         int rows = crmContractProductMapper.deleteContractProductById(id);
@@ -187,11 +213,14 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
      * @param list 入参明细
      * @param userId 操作人
      * @param now 当前时间
+     * @param retainedMap 既有明细索引（键为「渠道:模型」），命中时按已签约合同的宽松口径校验：
+     *                    沿用原账户可豁免账户有效性，改账户仍须为该客户的可用账户
      * @return 明细实体集合
      */
     private List<CrmContractProduct> buildEntities(Long contractId, Long consumerId,
                                                    List<CrmContractProductDto> list,
-                                                   Long userId, Date now)
+                                                   Long userId, Date now,
+                                                   Map<String, CrmContractProductDto> retainedMap)
     {
         List<CrmContractProduct> entities = new ArrayList<>();
         if (list == null || list.isEmpty())
@@ -244,21 +273,46 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
             {
                 throw new ServiceException(StringUtils.format("第 {} 行未选择渠道账户", rowNo));
             }
-            CrmSupplierAccountDto account = accountMap.get(dto.getSupplierAccountId());
-            if (account == null)
-            {
-                throw new ServiceException(StringUtils.format(
-                        "第 {} 行渠道账户不存在或不属于该客户的已开通渠道", rowNo));
-            }
-            if (!account.getSupplierId().equals(dto.getSupplierId()))
-            {
-                throw new ServiceException(StringUtils.format("第 {} 行渠道账户与所选渠道不匹配", rowNo));
-            }
             String key = dto.getSupplierId() + ":" + dto.getProductId();
-            if (!availableKeys.contains(key))
+            CrmContractProductDto old = retainedMap == null ? null : retainedMap.get(key);
+            CrmSupplierAccountDto account = accountMap.get(dto.getSupplierAccountId());
+            if (old != null)
             {
-                throw new ServiceException(StringUtils.format(
-                        "第 {} 行模型不在该客户的可用渠道内（渠道需已开通且模型需已上架），禁止添加", rowNo));
+                // 既有行：沿用原账户时豁免账户有效性；更换账户仍须命中客户可用账户且渠道匹配
+                boolean sameAccount = Objects.equals(old.getSupplierAccountId(), dto.getSupplierAccountId());
+                if (!sameAccount)
+                {
+                    if (account == null)
+                    {
+                        throw new ServiceException(StringUtils.format(
+                                "第 {} 行渠道账户不存在或不属于该客户的已开通渠道", rowNo));
+                    }
+                    if (!account.getSupplierId().equals(dto.getSupplierId()))
+                    {
+                        throw new ServiceException(StringUtils.format("第 {} 行渠道账户与所选渠道不匹配", rowNo));
+                    }
+                }
+                else if (account != null && !account.getSupplierId().equals(dto.getSupplierId()))
+                {
+                    throw new ServiceException(StringUtils.format("第 {} 行渠道账户与所选渠道不匹配", rowNo));
+                }
+            }
+            else
+            {
+                if (account == null)
+                {
+                    throw new ServiceException(StringUtils.format(
+                            "第 {} 行渠道账户不存在或不属于该客户的已开通渠道", rowNo));
+                }
+                if (!account.getSupplierId().equals(dto.getSupplierId()))
+                {
+                    throw new ServiceException(StringUtils.format("第 {} 行渠道账户与所选渠道不匹配", rowNo));
+                }
+                if (!availableKeys.contains(key))
+                {
+                    throw new ServiceException(StringUtils.format(
+                            "第 {} 行模型不在该客户的可用渠道内（渠道需已开通且模型需已上架），禁止添加", rowNo));
+                }
             }
             if (!seenKeys.add(key))
             {
@@ -335,6 +389,117 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
     }
 
     /**
+     * 明细增量对齐
+     *
+     * <p>以「渠道 + 模型」为业务键与既有明细比对：命中且字段有变化则按主键更新（保留明细ID），
+     * 未命中的新增，既有但本次未提交的删除。相比全量替换，可保证已签约合同在履约期间
+     * 变更明细后，历史对账台账 crm_contract_usage.contract_product_id 仍能指向有效明细。</p>
+     *
+     * @param contractId 合同ID
+     * @param existing 既有明细
+     * @param entities 本次提交的明细实体（已通过业务校验）
+     * @return 变更统计
+     */
+    private SaveStat saveIncremental(Long contractId, List<CrmContractProductDto> existing,
+                                     List<CrmContractProduct> entities)
+    {
+        SaveStat stat = new SaveStat();
+
+        Map<String, CrmContractProductDto> existingMap = new HashMap<>();
+        for (CrmContractProductDto old : existing)
+        {
+            if (old.getId() != null)
+            {
+                existingMap.put(productKey(old.getSupplierId(), old.getProductId()), old);
+            }
+        }
+
+        Set<String> keepKeys = new HashSet<>();
+        for (CrmContractProduct entity : entities)
+        {
+            String key = productKey(entity.getSupplierId(), entity.getProductId());
+            keepKeys.add(key);
+            CrmContractProductDto old = existingMap.get(key);
+            if (old == null)
+            {
+                stat.toInsert.add(entity);
+                continue;
+            }
+            if (isProductChanged(old, entity))
+            {
+                entity.setId(old.getId());
+                crmContractProductMapper.updateContractProduct(entity);
+                stat.updated++;
+            }
+        }
+
+        for (CrmContractProductDto old : existing)
+        {
+            if (old.getId() != null && !keepKeys.contains(productKey(old.getSupplierId(), old.getProductId())))
+            {
+                stat.removedIds.add(old.getId());
+            }
+        }
+        if (!stat.removedIds.isEmpty())
+        {
+            crmContractProductMapper.deleteContractProductByIds(contractId, stat.removedIds);
+        }
+        if (!stat.toInsert.isEmpty())
+        {
+            crmContractProductMapper.batchInsertContractProduct(stat.toInsert);
+        }
+        stat.inserted = stat.toInsert.size();
+        stat.removed = stat.removedIds.size();
+        return stat;
+    }
+
+    /**
+     * 明细业务键：「渠道 + 模型」，同一模型允许挂在多个渠道下
+     *
+     * @param supplierId 渠道ID
+     * @param productId 模型ID
+     * @return 业务键
+     */
+    private String productKey(Long supplierId, Long productId)
+    {
+        return supplierId + ":" + productId;
+    }
+
+    /**
+     * 判断明细是否需要更新
+     *
+     * <p>仅比较可变更字段，避免无实际变化的行产生无意义的日志与 update_time 漂移。</p>
+     *
+     * @param old 既有明细
+     * @param now 本次提交的明细
+     * @return true 存在差异
+     */
+    private boolean isProductChanged(CrmContractProductDto old, CrmContractProduct now)
+    {
+        return !Objects.equals(old.getSupplierAccountId(), now.getSupplierAccountId())
+                || !sameDiscount(old.getCostDiscount(), now.getCostDiscount())
+                || !sameDiscount(old.getSellDiscount(), now.getSellDiscount())
+                || !Objects.equals(StringUtils.trimToEmpty(old.getPriceDetail()), StringUtils.trimToEmpty(now.getPriceDetail()))
+                || !Objects.equals(StringUtils.trimToEmpty(old.getRemark()), StringUtils.trimToEmpty(now.getRemark()));
+    }
+
+    /**
+     * 折扣比较：忽略标度差异（1.0 与 1.00 视为相同）
+     *
+     * @param left 折扣
+     * @param right 折扣
+     * @return true 数值相等
+     */
+    private boolean sameDiscount(BigDecimal left, BigDecimal right)
+    {
+        if (left == null || right == null)
+        {
+            return left == right;
+        }
+        return left.compareTo(right) == 0;
+    }
+
+    /**
      * 写入操作日志
      *
      * @param contractId 合同ID
@@ -355,5 +520,26 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
         log.setOperatorName(SecurityUtils.getUsername());
         log.setCreateTime(DateUtils.getNowDate());
         crmContractLogMapper.insertCrmContractLog(log);
+    }
+
+    /**
+     * 明细增量保存统计，用于操作日志留痕
+     */
+    private static class SaveStat
+    {
+        /** 待新增明细 */
+        private final List<CrmContractProduct> toInsert = new ArrayList<>();
+
+        /** 待删除明细ID */
+        private final List<Long> removedIds = new ArrayList<>();
+
+        /** 新增条数 */
+        private int inserted;
+
+        /** 更新条数 */
+        private int updated;
+
+        /** 删除条数 */
+        private int removed;
     }
 }

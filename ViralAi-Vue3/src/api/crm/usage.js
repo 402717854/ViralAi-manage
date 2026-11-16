@@ -79,3 +79,24 @@ export function pullCallLog(data) {
     data: data
   })
 }
+
+// 手工上传网关原始流水文件（Excel），入库后按文件内区间自动对账
+export function uploadCallLog(data) {
+  return request({
+    url: '/crm/gateway-call-log/upload',
+    method: 'post',
+    data: data,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    // 文件解析 + 入库 + 对账耗时明显长于普通接口，单独放大超时
+    timeout: 300000
+  })
+}
+
+// 客户可用的「渠道 + 渠道账户」组合，用于上传弹窗三级联动
+export function getCustomerSupplierAccounts(customerId) {
+  return request({
+    url: '/crm/usage/customer-supplier-accounts',
+    method: 'get',
+    params: { customerId }
+  })
+}

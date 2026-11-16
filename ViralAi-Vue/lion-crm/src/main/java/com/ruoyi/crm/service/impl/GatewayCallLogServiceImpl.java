@@ -1,6 +1,7 @@
 package com.ruoyi.crm.service.impl;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -8,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +22,11 @@ import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.crm.domain.CrmSupplierAccount;
 import com.ruoyi.crm.domain.GatewayCallLog;
+import com.ruoyi.crm.dto.CrmCustomerSupplierAccountVo;
 import com.ruoyi.crm.dto.GatewayCallLogDto;
+import com.ruoyi.crm.dto.GatewayCallLogUploadDto;
+import com.ruoyi.crm.mapper.CrmContractProductMapper;
+import com.ruoyi.crm.mapper.CrmCustomerMapper;
 import com.ruoyi.crm.mapper.CrmSupplierAccountMapper;
 import com.ruoyi.crm.mapper.GatewayCallLogMapper;
 import com.ruoyi.crm.service.IGatewayCallLogService;
@@ -62,6 +68,15 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
     /** gateway_call_log.err_msg 长度 */
     private static final int MAX_ERR_MSG = 500;
 
+    /** gateway_call_log.call_no 长度 */
+    private static final int MAX_CALL_NO = 128;
+
+    /** 单次上传的最大数据行数，防止误传超大文件拖垮数据库 */
+    private static final int MAX_UPLOAD_ROWS = 20000;
+
+    /** 行级错误样例上限，避免一次上传把几千条错误塞进响应 */
+    private static final int MAX_ROW_ERROR_SAMPLE = 20;
+
     /** 未映射用户名样例上限，避免一次拉取把几万个用户名塞进响应 */
     private static final int MAX_UNMAPPED_SAMPLE = 20;
 
@@ -73,6 +88,12 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
 
     @Autowired
     private CrmSupplierAccountMapper crmSupplierAccountMapper;
+
+    @Autowired
+    private CrmCustomerMapper crmCustomerMapper;
+
+    @Autowired
+    private CrmContractProductMapper crmContractProductMapper;
 
     @Autowired
     private CrmFinanceDataScope crmFinanceDataScope;
@@ -281,7 +302,7 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
         {
             // 全部为文件上传账户：不存在可路由拉取的账户，直接给出结论而不是「成功 0 条」
             throw new ServiceException("所选范围内没有采用「路由获取」方式的渠道账户，"
-                    + "文件上传方式的账户由人工上传流水文件，不参与路由拉取");
+                    + "文件上传方式的账户请到「网关原始流水 - 上传流水」导入流水文件");
         }
         if (failed > 0 && failed == attempted)
         {
@@ -313,6 +334,291 @@ public class GatewayCallLogServiceImpl implements IGatewayCallLogService
                 start, end, accounts.size(), failed, skipped, result.get("pulled"), unmapped, missingModel,
                 result.get("inserted"), result.get("duplicated"));
         return result;
+    }
+
+    /**
+     * 手工上传的流水文件解析结果入库
+     *
+     * <p>与路由拉取共用同一套模型映射与入库逻辑，差别只有数据来源：
+     * 客户由上传界面指定（一个文件归属一个客户，文件里不再带客户标识，
+     * 避免多客户混表时归错账），模型取「模型编码」列（填了就直接用）
+     * 或「模型标识 + 模型变体」（走映射）。模型解析不出来的行不入库，
+     * 只计数并给出样例行号。</p>
+     *
+     * @param rows 解析后的文件行
+     * @param supplierId 流水所属渠道
+     * @param supplierAccountId 渠道账户，必填
+     * @param customerId 流水归属客户
+     * @param fileName 上传文件名
+     * @param operator 上传人
+     * @return 统计结果
+     */
+    @Override
+    public Map<String, Object> uploadAndIngest(List<GatewayCallLogUploadDto> rows, Long supplierId,
+                                               Long supplierAccountId, Long customerId, String fileName,
+                                               String operator)
+    {
+        if (supplierId == null)
+        {
+            throw new ServiceException("请选择流水所属渠道");
+        }
+        if (customerId == null)
+        {
+            throw new ServiceException("请选择流水归属客户");
+        }
+        if (supplierAccountId == null)
+        {
+            throw new ServiceException("请选择渠道账户");
+        }
+        if (crmCustomerMapper.selectCrmCustomerById(customerId) == null)
+        {
+            throw new ServiceException("客户不存在（客户ID=" + customerId + "）");
+        }
+        if (rows == null || rows.isEmpty())
+        {
+            throw new ServiceException("文件没有可解析的数据行，请确认第一行为表头、数据从第二行开始，并使用导入模板的表头名称");
+        }
+        if (rows.size() > MAX_UPLOAD_ROWS)
+        {
+            throw new ServiceException("单次最多上传 " + MAX_UPLOAD_ROWS + " 行，当前 " + rows.size()
+                    + " 行，请拆分文件后分批上传");
+        }
+        List<CrmSupplierAccount> accounts = crmSupplierAccountMapper.selectAccountsForPull(supplierId,
+                supplierAccountId);
+        if (accounts == null || accounts.isEmpty())
+        {
+            throw new ServiceException("渠道账户不存在（账户ID=" + supplierAccountId + "）");
+        }
+        if (!supplierId.equals(accounts.get(0).getSupplierId()))
+        {
+            throw new ServiceException("账户 " + supplierAccountId + " 不属于渠道 " + supplierId);
+        }
+        // 客户 → 渠道 → 账户 必须是该客户生效合同明细里的组合，避免流水挂到合同外的渠道账户上导致对账永远匹配不到
+        List<CrmCustomerSupplierAccountVo> combos = crmContractProductMapper
+                .selectSupplierAccountsByCustomer(customerId);
+        if (combos == null || combos.isEmpty())
+        {
+            throw new ServiceException("该客户没有已签约的合同，无法确认流水的渠道账户；请先在合同中配置渠道与账户明细");
+        }
+        List<CrmCustomerSupplierAccountVo> channelCombos = combos.stream()
+                .filter(item -> supplierId.equals(item.getSupplierId()))
+                .collect(Collectors.toList());
+        if (channelCombos.isEmpty())
+        {
+            String names = combos.stream().map(CrmCustomerSupplierAccountVo::getSupplierName)
+                    .filter(StringUtils::isNotEmpty).distinct().limit(5).collect(Collectors.joining("、"));
+            throw new ServiceException("该客户的合同明细里没有所选渠道，不能上传该渠道的流水"
+                    + (StringUtils.isEmpty(names) ? "" : "；合同内渠道：" + names));
+        }
+        // 历史合同明细可能未绑定账户（supplier_account_id 为空），此时只要求账户属于该渠道
+        boolean accountBlank = channelCombos.stream().anyMatch(item -> item.getSupplierAccountId() == null);
+        boolean accountMatched = channelCombos.stream()
+                .anyMatch(item -> supplierAccountId.equals(item.getSupplierAccountId()));
+        if (!accountMatched && !accountBlank)
+        {
+            String names = channelCombos.stream().map(CrmCustomerSupplierAccountVo::getSupplierAccountName)
+                    .filter(StringUtils::isNotEmpty).distinct().limit(5).collect(Collectors.joining("、"));
+            throw new ServiceException("所选账户不在该客户于本渠道的合同明细中"
+                    + (StringUtils.isEmpty(names) ? "" : "；合同内账户：" + names));
+        }
+        GatewayPullMapping mapping = gatewayPullMappingLoader.load(mappingAccounts(accounts, supplierId));
+        String trace = uploadTrace(fileName, operator);
+
+        List<GatewayCallLog> logs = new ArrayList<>();
+        List<String> rowErrors = new ArrayList<>();
+        Set<String> missingModels = new LinkedHashSet<>();
+        int invalid = 0;
+        int missingModel = 0;
+        Date min = null;
+        Date max = null;
+
+        // 表头占第 1 行，数据从第 2 行开始，行号用于回报错误位置
+        int rowNo = 1;
+        for (GatewayCallLogUploadDto row : rows)
+        {
+            rowNo++;
+            if (row == null)
+            {
+                continue;
+            }
+            String callNo = StringUtils.trim(row.getCallNo());
+            if (StringUtils.isEmpty(callNo))
+            {
+                invalid++;
+                addRowError(rowErrors, rowNo, "流水号为空");
+                continue;
+            }
+            if (row.getCallTime() == null)
+            {
+                invalid++;
+                addRowError(rowErrors, rowNo, "调用时间为空或格式不是 yyyy-MM-dd HH:mm:ss");
+                continue;
+            }
+            String productCode = resolveUploadProductCode(mapping, supplierId, supplierAccountId, row);
+            if (StringUtils.isEmpty(productCode))
+            {
+                missingModel++;
+                if (missingModels.size() < MAX_UNMAPPED_SAMPLE)
+                {
+                    missingModels.add(rowNo + " 行:" + (StringUtils.isEmpty(row.getModelKey()) ? "<空>"
+                            : row.getModelKey().trim()));
+                }
+                continue;
+            }
+            GatewayCallLog item = new GatewayCallLog();
+            item.setCallNo(GatewayPullSupport.truncate(callNo, MAX_CALL_NO));
+            item.setCustomerId(customerId);
+            item.setSupplierId(supplierId);
+            item.setSupplierAccountId(supplierAccountId);
+            item.setProductCode(productCode);
+            item.setModelType(StringUtils.trim(row.getModelType()));
+            item.setPromptTokens(row.getPromptTokens());
+            item.setCompletionTokens(row.getCompletionTokens());
+            item.setTotalTokens(row.getTotalTokens());
+            item.setTotalFees(row.getTotalFees());
+            item.setActualFees(row.getActualFees());
+            item.setCallTime(row.getCallTime());
+            item.setCallStatus(parseCallStatus(row.getCallStatusText()));
+            item.setErrMsg(GatewayPullSupport.truncate(StringUtils.trim(row.getErrMsg()), MAX_ERR_MSG));
+            item.setRawPriceDetail(trace);
+            if (min == null || item.getCallTime().before(min))
+            {
+                min = item.getCallTime();
+            }
+            if (max == null || item.getCallTime().after(max))
+            {
+                max = item.getCallTime();
+            }
+            logs.add(item);
+        }
+
+        Map<String, Object> result = ingest(logs);
+        int ingestInvalid = result.get("invalid") == null ? 0 : (Integer) result.get("invalid");
+        result.put("source", "upload");
+        result.put("parsed", rows.size());
+        // 文件行数与入库校验口径合并，保证「解析 = 入库 + 重复 + 无效 + 缺模型」
+        result.put("invalid", invalid + ingestInvalid);
+        result.put("missingModel", missingModel);
+        result.put("missingModelSample", new ArrayList<>(missingModels));
+        result.put("rowErrors", rowErrors);
+        result.put("supplierId", supplierId);
+        result.put("supplierAccountId", supplierAccountId);
+        result.put("customerId", customerId);
+        result.put("startTime", min);
+        result.put("endTime", max);
+        log.info("流水文件上传完成，文件={}，上传人={}，渠道={}，账户={}，客户={}，解析 {} 行，入库 {} 条 / 重复 {} 条 / "
+                        + "无效 {} 条 / 缺模型编码 {} 条",
+                fileName, operator, supplierId, supplierAccountId, customerId, rows.size(),
+                result.get("inserted"), result.get("duplicated"), result.get("invalid"), missingModel);
+        return result;
+    }
+
+    /**
+     * 上传行解析模型编码：直接填了模型编码就用，否则走映射再退化为上游标识
+     *
+     * @param mapping 映射索引
+     * @param supplierId 渠道ID
+     * @param supplierAccountId 账户ID
+     * @param row 文件行
+     * @return 模型编码，无法确定返回 null
+     */
+    private String resolveUploadProductCode(GatewayPullMapping mapping, Long supplierId, Long supplierAccountId,
+                                            GatewayCallLogUploadDto row)
+    {
+        if (StringUtils.isNotEmpty(row.getProductCode()))
+        {
+            return GatewayPullSupport.truncate(row.getProductCode().trim(), MAX_PRODUCT_CODE);
+        }
+        String code = mapping.resolveProductCode(supplierId, supplierAccountId, row.getModelKey(),
+                row.getModelVariant());
+        if (StringUtils.isNotEmpty(code))
+        {
+            return GatewayPullSupport.truncate(code, MAX_PRODUCT_CODE);
+        }
+        if (StringUtils.isEmpty(row.getModelKey()))
+        {
+            return null;
+        }
+        String fallback = row.getModelKey().trim();
+        if (StringUtils.isNotEmpty(row.getModelVariant()))
+        {
+            fallback = fallback + "-" + row.getModelVariant().trim().replace('|', '-');
+        }
+        return GatewayPullSupport.truncate(fallback, MAX_PRODUCT_CODE);
+    }
+
+    /**
+     * 调用状态归一：兼容 成功/失败、1/0、true/false，留空按成功处理
+     *
+     * @param text 文件中的状态文本
+     * @return 0 失败 / 1 成功
+     */
+    private Integer parseCallStatus(String text)
+    {
+        if (StringUtils.isEmpty(text))
+        {
+            return 1;
+        }
+        String value = text.trim().toLowerCase();
+        if ("0".equals(value) || "失败".equals(value) || "fail".equals(value) || "failed".equals(value)
+                || "false".equals(value) || "n".equals(value) || "no".equals(value))
+        {
+            return 0;
+        }
+        return 1;
+    }
+
+    /**
+     * 上传来源标记，写入 raw_price_detail 便于按流水追溯是谁在什么时候上传的
+     *
+     * @param fileName 文件名
+     * @param operator 上传人
+     * @return JSON 片段
+     */
+    private String uploadTrace(String fileName, String operator)
+    {
+        String file = StringUtils.isEmpty(fileName) ? "" : fileName.replace("\\", "/").replace("\"", "'");
+        String user = StringUtils.isEmpty(operator) ? "" : operator.replace("\"", "'");
+        String json = "{\"source\":\"manual-upload\",\"file\":\"" + file + "\",\"operator\":\"" + user
+                + "\",\"uploadTime\":\"" + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())
+                + "\"}";
+        return GatewayPullSupport.truncate(json, MAX_ERR_MSG);
+    }
+
+    /**
+     * 追加行级错误样例
+     *
+     * @param rowErrors 错误样例集合
+     * @param rowNo 行号
+     * @param reason 原因
+     */
+    private void addRowError(List<String> rowErrors, int rowNo, String reason)
+    {
+        if (rowErrors.size() < MAX_ROW_ERROR_SAMPLE)
+        {
+            rowErrors.add("第 " + rowNo + " 行：" + reason);
+        }
+    }
+
+    /**
+     * 映射加载所需的账户清单
+     *
+     * <p>渠道下没有任何启用账户时仍要能命中渠道级规则，因此塞一个只带 supplierId 的探针账户，
+     * 让映射加载器按渠道维度取规则。</p>
+     *
+     * @param accounts 账户清单，可能为空
+     * @param supplierId 渠道ID
+     * @return 非空账户清单
+     */
+    private List<CrmSupplierAccount> mappingAccounts(List<CrmSupplierAccount> accounts, Long supplierId)
+    {
+        if (accounts != null && !accounts.isEmpty())
+        {
+            return accounts;
+        }
+        CrmSupplierAccount probe = new CrmSupplierAccount();
+        probe.setSupplierId(supplierId);
+        return Collections.singletonList(probe);
     }
 
     /**

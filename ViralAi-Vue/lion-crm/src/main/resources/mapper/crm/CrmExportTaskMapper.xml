@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmExportTaskMapper">
+
+    <resultMap type="CrmExportTask" id="CrmExportTaskResult">
+        <result property="id"          column="id"           />
+        <result property="bizType"     column="biz_type"     />
+        <result property="fileName"    column="file_name"    />
+        <result property="filePath"    column="file_path"    />
+        <result property="queryParams" column="query_params" />
+        <result property="status"      column="status"       />
+        <result property="rowCount"    column="row_count"    />
+        <result property="errMsg"      column="err_msg"      />
+        <result property="creatorId"   column="creator_id"   />
+        <result property="creatorName" column="creator_name" />
+        <result property="createTime"  column="create_time"  />
+        <result property="startTime"   column="start_time"   />
+        <result property="finishTime"  column="finish_time"  />
+        <result property="expireTime"  column="expire_time"  />
+        <result property="deleted"     column="deleted"      />
+    </resultMap>
+
+    <sql id="selectExportTaskVo">
+        select id, biz_type, file_name, file_path, query_params, status, row_count, err_msg,
+               creator_id, creator_name, create_time, start_time, finish_time, expire_time, deleted
+        from crm_export_task
+    </sql>
+
+    <insert id="insertExportTask" parameterType="CrmExportTask" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_export_task (
+            biz_type, file_name, query_params, status, row_count, creator_id, creator_name,
+            create_time, expire_time, deleted
+        ) values (
+            #{bizType}, #{fileName}, #{queryParams}, #{status}, 0, #{creatorId}, #{creatorName},
+            #{createTime}, #{expireTime}, 0
+        )
+    </insert>
+
+    <select id="selectExportTaskById" parameterType="Long" resultMap="CrmExportTaskResult">
+        <include refid="selectExportTaskVo"/>
+        where id = #{id} and deleted = 0
+    </select>
+
+    <update id="markRunning">
+        update crm_export_task
+        set status = 1, start_time = #{startTime}, err_msg = null
+        where id = #{id} and deleted = 0
+    </update>
+
+    <update id="markSuccess">
+        update crm_export_task
+        set status = 2, file_path = #{filePath}, row_count = #{rowCount},
+            finish_time = #{finishTime}, err_msg = null
+        where id = #{id} and deleted = 0
+    </update>
+
+    <update id="markFailed">
+        update crm_export_task
+        set status = 3, err_msg = #{errMsg}, finish_time = #{finishTime}
+        where id = #{id} and deleted = 0
+    </update>
+
+    <!-- 清理过期任务：只取需要删文件的字段，按完成时间升序，避免一次删太多 -->
+    <select id="selectExpiredTasks" resultMap="CrmExportTaskResult">
+        select id, file_path
+        from crm_export_task
+        where deleted = 0
+          and expire_time is not null
+          and expire_time &lt; #{expireBefore}
+        order by expire_time
+        limit #{limit}
+    </select>
+
+    <delete id="deleteExportTaskByIds">
+        delete from crm_export_task
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.ruoyi.crm.domain.GatewayCallLog;
 import com.ruoyi.crm.dto.GatewayCallLogDto;
+import com.ruoyi.crm.dto.GatewayCallLogUploadDto;
 
 /**
  * 网关调用流水Service接口
@@ -58,4 +59,26 @@ public interface IGatewayCallLogService
     {
         return pullAndIngest(startTime, endTime, supplierId, null);
     }
+
+    /**
+     * 手工上传的流水文件解析结果入库
+     *
+     * <p>用于「拉取方式 = 文件上传」的渠道账户：上游不提供接口或不允许接口拉取时，
+     * 由财务/运维导出流水文件后人工上传。客户由上传界面指定（一个文件归属一个客户），
+     * 模型编码按 {@code crm_gateway_pull_map} 解析，与路由拉取口径一致，
+     * 因此两种方式可以混用而不会算错账。</p>
+     *
+     * @param rows 解析后的文件行
+     * @param supplierId 流水所属渠道，必填
+     * @param supplierAccountId 渠道账户，必填；客户 / 渠道 / 账户三者必须是该客户生效合同明细里的组合
+     * @param customerId 流水归属客户，必填
+     * @param fileName 上传文件名，写入流水原始计费信息便于追溯来源
+     * @param operator 上传人，写入流水原始计费信息便于追溯来源
+     * @return 统计结果：在 {@link #ingest(List)} 的键之外，追加 parsed 解析行数、
+     *         missingModel 缺模型编码数、rowErrors 行级错误样例、
+     *         startTime / endTime 已入库流水的调用时间区间
+     */
+    public Map<String, Object> uploadAndIngest(List<GatewayCallLogUploadDto> rows, Long supplierId,
+                                               Long supplierAccountId, Long customerId, String fileName,
+                                               String operator);
 }

@@ -67,4 +67,49 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <delete id="deleteContractProductById" parameterType="Long">
         delete from crm_contract_product where id = #{id}
     </delete>
+
+    <!-- 增量保存：命中「渠道 + 模型」的既有行按主键更新，保留 id 以免对账台账引用悬空 -->
+    <update id="updateContractProduct" parameterType="CrmContractProduct">
+        update crm_contract_product
+        <set>
+            <if test="supplierAccountId != null">supplier_account_id = #{supplierAccountId},</if>
+            <if test="costDiscount != null">cost_discount = #{costDiscount},</if>
+            <if test="sellDiscount != null">sell_discount = #{sellDiscount},</if>
+            price_detail = #{priceDetail},
+            remark = #{remark},
+            <if test="updater != null">updater = #{updater},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        where id = #{id} and contract_id = #{contractId}
+    </update>
+
+    <delete id="deleteContractProductByIds">
+        delete from crm_contract_product
+        where contract_id = #{contractId}
+          and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <!-- 客户 → 渠道 → 渠道账户 联动：三者关系由合同明细行承载，去重后供下拉使用 -->
+    <!-- 合同状态 2已签约 3已到期 5已归档 才承载真实渠道账户；草稿/审批中未生效，作废合同不参与 -->
+    <select id="selectSupplierAccountsByCustomer" resultType="com.ruoyi.crm.dto.CrmCustomerSupplierAccountVo">
+        select distinct
+               cp.supplier_id         as supplier_id,
+               s.name                 as supplier_name,
+               cp.supplier_account_id as supplier_account_id,
+               sa.account_name        as supplier_account_name,
+               sa.status              as account_status,
+               sa.pull_type           as pull_type
+        from crm_contract c
+        inner join crm_contract_product cp on cp.contract_id = c.id and cp.deleted = 0
+        left join crm_supplier s on s.id = cp.supplier_id
+        left join crm_supplier_account sa on sa.id = cp.supplier_account_id
+        where c.deleted = 0
+          and c.status in (2, 3, 5)
+          and c.consumer_id = #{customerId}
+          and cp.supplier_id is not null
+        order by cp.supplier_id, cp.supplier_account_id
+    </select>
 </mapper>

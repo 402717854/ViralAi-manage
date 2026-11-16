@@ -8,6 +8,7 @@ import com.ruoyi.crm.dto.CrmContractDto;
 import com.ruoyi.crm.dto.CrmContractInitVo;
 import com.ruoyi.crm.dto.CrmContractProductDto;
 import com.ruoyi.crm.dto.CrmContractVo;
+import com.ruoyi.crm.dto.CrmCustomerSupplierAccountVo;
 
 /**
  * 合同Service接口
@@ -119,4 +120,15 @@ public interface ICrmContractService
      * @return 变更行数
      */
     public int expireContracts();
+
+    /**
+     * 查询客户合同内可用的「渠道 + 渠道账户」组合（去重）
+     *
+     * <p>供用量流水人工上传等场景做三级联动：客户由合同主表绑定，渠道与账户由合同明细行承载。
+     * 只统计已签约、已到期、已归档的合同，草稿/审批中/已作废不参与。</p>
+     *
+     * @param customerId 客户ID
+     * @return 组合集合；客户不存在或没有生效合同时返回空集合
+     */
+    public List<CrmCustomerSupplierAccountVo> selectCustomerSupplierAccounts(Long customerId);
 }

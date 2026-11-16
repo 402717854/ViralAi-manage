@@ -106,6 +106,18 @@
 
         <!-- 模型明细 -->
         <el-tab-pane label="模型明细" name="products">
+          <div class="tab-toolbar">
+            <span class="tab-hint">{{ productsHint }}</span>
+            <el-button
+              v-if="canEditProducts"
+              type="primary"
+              plain
+              size="small"
+              icon="Edit"
+              @click="handleEditProducts"
+              v-hasPermi="['crm:contract:edit']"
+            >{{ productsActionLabel }}</el-button>
+          </div>
           <el-table v-if="products.length" :data="products" border size="small">
             <el-table-column label="渠道" prop="supplierName" min-width="140" show-overflow-tooltip />
             <el-table-column label="渠道账户" prop="supplierAccountName" min-width="160" show-overflow-tooltip />
@@ -278,6 +290,19 @@ const canCancel = computed(() => statusCode.value === 2 || statusCode.value === 
 const canArchive = computed(() => [2, 3, 4].includes(statusCode.value))
 const statusTagType = computed(() => STATUS_TAG_TYPES[statusCode.value] || "info")
 
+/** 草稿与已签约均允许维护模型明细，与后端 ContractStatusEnum#isProductEditable 保持一致 */
+const canEditProducts = computed(() => statusCode.value === 0 || statusCode.value === 2)
+
+/** 明细页操作提示：已签约合同变更会即时生效 */
+const productsHint = computed(() =>
+  statusCode.value === 2
+    ? "已签约合同可调整渠道模型与折扣，保存后立即生效并记入操作日志；历史台账按原折扣快照结算，不受影响"
+    : "草稿合同可直接维护渠道模型、折扣与价格明细"
+)
+
+/** 草稿态明细与主信息同页维护，按钮沿用「编辑」；已签约合同仅开放明细编辑 */
+const productsActionLabel = computed(() => (statusCode.value === 2 ? "编辑明细" : "编辑"))
+
 function statusLabel(code) {
   if (code === null || code === undefined) {
     return "-"
@@ -329,6 +354,15 @@ function handleBack() {
 
 function handleEdit() {
   router.push({ path: contractBasePath.value + "/edit", query: { id: detail.value.id } })
+}
+
+/** 维护模型明细：草稿进入常规编辑页，已签约进入仅明细编辑模式 */
+function handleEditProducts() {
+  const query = { id: detail.value.id }
+  if (statusCode.value === 2) {
+    query.mode = "products"
+  }
+  router.push({ path: contractBasePath.value + "/edit", query })
 }
 
 function handleSubmit() {
@@ -490,6 +524,20 @@ loadDetail()
 .sub-text {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+.tab-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tab-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
 }
 
 .timeline-title {

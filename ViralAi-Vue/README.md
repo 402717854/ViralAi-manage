@@ -5,6 +5,8 @@
     docker compose -f docker-compose-prod.yml --env-file .env build
 
     docker save -o viralai-prod.tar viralai:prod
+    docker save -o viralai-manage.tar viralai-manage:latest
+    docker save -o viralai-web.tar viralai-web:latest
 
     docker load -i viralai-prod.tar.gz
     

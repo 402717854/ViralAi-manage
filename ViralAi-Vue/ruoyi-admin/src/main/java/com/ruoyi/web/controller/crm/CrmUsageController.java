@@ -22,9 +22,11 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.crm.dto.CrmContractUsageDto;
+import com.ruoyi.crm.dto.CrmCustomerSupplierAccountVo;
 import com.ruoyi.crm.dto.CrmSupplierStatVo;
 import com.ruoyi.crm.dto.CrmUsageBoardVo;
 import com.ruoyi.crm.dto.CrmUsageReconcileVo;
+import com.ruoyi.crm.service.ICrmContractService;
 import com.ruoyi.crm.service.ICrmContractUsageService;
 
 /**
@@ -34,6 +36,7 @@ import com.ruoyi.crm.service.ICrmContractUsageService;
  * <pre>
  * GET    /crm/usage/list              台账分页
  * GET    /crm/usage/{id}              台账详情
+ * GET    /crm/usage/customer-supplier-accounts  客户可用渠道账户（上传联动）
  * POST   /crm/usage/reconcile         手动对账（区间 + 渠道）
  * POST   /crm/usage/rematch/{id}      单条重新匹配
  * GET    /crm/usage/board             渠道对账看板
@@ -50,6 +53,9 @@ public class CrmUsageController extends BaseController
 {
     @Autowired
     private ICrmContractUsageService crmContractUsageService;
+
+    @Autowired
+    private ICrmContractService crmContractService;
 
     /**
      * 查询台账列表
@@ -71,6 +77,23 @@ public class CrmUsageController extends BaseController
     public AjaxResult getInfo(@PathVariable("id") Long id)
     {
         return success(crmContractUsageService.selectCrmContractUsageById(id));
+    }
+
+    /**
+     * 客户可用的「渠道 + 渠道账户」组合
+     *
+     * <p>用于流水上传弹窗的三级联动：客户 → 渠道 → 渠道账户。数据取自该客户生效合同
+     * （已签约 / 已到期 / 已归档）的明细行，因此下拉里只会出现合同上真实配置过的组合。
+     * 属于只读字典接口，与渠道/账户的 options 接口一致，仅要求登录。</p>
+     *
+     * @param customerId 客户ID
+     * @return 组合集合，前端按 supplierId 聚合出渠道、按 supplierAccountId 聚合出账户
+     */
+    @GetMapping("/customer-supplier-accounts")
+    public AjaxResult customerSupplierAccounts(@RequestParam("customerId") Long customerId)
+    {
+        List<CrmCustomerSupplierAccountVo> list = crmContractService.selectCustomerSupplierAccounts(customerId);
+        return success(list);
     }
 
     /**

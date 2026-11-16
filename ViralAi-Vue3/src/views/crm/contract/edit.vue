@@ -1,6 +1,10 @@
 <template>
   <div class="app-container" v-loading="loading">
-    <el-page-header @back="handleBack" :content="isCreate ? '新增合同' : '编辑合同（草稿）'" class="page-header" />
+    <el-page-header
+      @back="handleBack"
+      :content="isCreate ? '新增合同' : (productsOnly ? '编辑模型明细（已签约）' : '编辑合同（草稿）')"
+      class="page-header"
+    />
 
     <el-card shadow="never" class="section-card">
       <template #header>
@@ -9,7 +13,16 @@
           <el-tag v-if="!isCreate" size="small" type="info">合同编号：{{ form.contactNo || "保存后自动生成" }}</el-tag>
         </div>
       </template>
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="110px">
+      <el-alert
+        v-if="productsOnly"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="mode-alert"
+        title="已签约合同变更明细将立即生效"
+        description="基础信息不可修改；新的渠道模型与折扣保存后即刻用于后续对账计费，历史台账按原折扣快照结算，不受影响。"
+      />
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="110px" :disabled="productsOnly">
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="商机" prop="busId">
@@ -87,7 +100,11 @@
         <div class="section-title">
           <span>模型产品明细</span>
           <div class="section-actions">
-            <span class="hint">仅可选择客户已关联渠道下的模型，同一渠道下同一模型不可重复添加</span>
+            <span class="hint">
+              {{ productsOnly
+                ? "已签约合同可增删模型、调整折扣与价格明细，保存后立即生效并记入操作日志"
+                : "仅可选择客户已关联渠道下的模型，同一渠道下同一模型不可重复添加" }}
+            </span>
             <el-button type="primary" plain icon="Plus" :disabled="!form.consumerId" @click="openAddProduct">
               添加渠道模型
             </el-button>
@@ -175,8 +192,13 @@
 
     <div class="footer-bar">
       <el-button @click="handleBack">返 回</el-button>
-      <el-button type="primary" :loading="saving" @click="handleSave(false)">保存草稿</el-button>
-      <el-button type="success" :loading="saving" @click="handleSave(true)">保存并提交审批</el-button>
+      <template v-if="productsOnly">
+        <el-button type="primary" :loading="saving" @click="handleSave(false)">保存明细</el-button>
+      </template>
+      <template v-else>
+        <el-button type="primary" :loading="saving" @click="handleSave(false)">保存草稿</el-button>
+        <el-button type="success" :loading="saving" @click="handleSave(true)">保存并提交审批</el-button>
+      </template>
     </div>
 
     <!-- 添加渠道模型 -->
@@ -290,7 +312,7 @@
 </template>
 
 <script setup name="ContractEdit">
-import { getContract, initContract, saveContract, submitAudit } from "@/api/crm/contract"
+import { getContract, initContract, saveContract, submitAudit, batchSaveContractProduct } from "@/api/crm/contract"
 import { listBusiness } from "@/api/crm/business"
 import { getCustomerProductOptions, getCustomerSupplierAccounts } from "@/api/crm/customer"
 
@@ -307,6 +329,8 @@ const formRef = ref()
 const addRef = ref()
 
 const isCreate = ref(true)
+/** 已签约合同的「仅明细编辑」模式：基础信息只读，保存仅提交明细 */
+const productsOnly = ref(false)
 const busLocked = ref(false)
 const busOptions = ref([])
 const busLoading = ref(false)
@@ -725,6 +749,18 @@ function validateRows(requireAtLeastOne) {
   return true
 }
 
+/** 组装明细入参：草稿保存与已签约明细维护共用 */
+function buildProductsPayload() {
+  return rows.value.map(row => ({
+    supplierId: row.supplierId,
+    supplierAccountId: row.supplierAccountId,
+    productId: row.productId,
+    costDiscount: row.costDiscount,
+    sellDiscount: row.sellDiscount,
+    priceDetail: row.priceDetail || null
+  }))
+}
+
 /** 组装保存入参：主表不再携带渠道，渠道随明细行提交 */
 function buildPayload() {
   return {
@@ -735,19 +771,33 @@ function buildPayload() {
     contractEntity: String(form.value.contractEntity || "").trim(),
     expireTime: form.value.expireTime,
     remark: form.value.remark,
-    products: rows.value.map(row => ({
-      supplierId: row.supplierId,
-      supplierAccountId: row.supplierAccountId,
-      productId: row.productId,
-      costDiscount: row.costDiscount,
-      sellDiscount: row.sellDiscount,
-      priceDetail: row.priceDetail || null
-    }))
+    products: buildProductsPayload()
   }
+}
+
+/** 已签约合同仅维护明细：不调用主信息保存接口，避免非草稿状态被后端拦截 */
+function saveProductsOnly() {
+  if (!validateRows(true)) {
+    return
+  }
+  saving.value = true
+  batchSaveContractProduct({ contractId: form.value.id, list: buildProductsPayload() })
+    .then(() => {
+      proxy.$modal.msgSuccess("模型明细已更新")
+      router.push({ path: contractBasePath.value + "/detail", query: { id: form.value.id } })
+    })
+    .catch(() => {})
+    .finally(() => {
+      saving.value = false
+    })
 }
 
 /** 保存（可串联提交审批） */
 function handleSave(andSubmit) {
+  if (productsOnly.value) {
+    saveProductsOnly()
+    return
+  }
   formRef.value.validate(valid => {
     if (!valid) {
       return
@@ -822,19 +872,36 @@ function applyDetail(data) {
 }
 
 function handleBack() {
+  if (productsOnly.value && form.value.id) {
+    router.push({ path: contractBasePath.value + "/detail", query: { id: form.value.id } })
+    return
+  }
   router.push({ path: contractBasePath.value })
 }
 
 /** 初始化：编辑模式加载详情，新增模式预载商机 */
 function init() {
   const id = route.query.id
+  const mode = route.query.mode
   if (id) {
     isCreate.value = false
     loading.value = true
     getContract(id)
       .then(res => {
         const data = res.data || {}
-        if (Number(data.status) !== 0) {
+        const status = Number(data.status)
+        if (mode === "products") {
+          // 已签约合同仅开放明细维护；草稿仍走常规编辑（可同时修改主信息）
+          if (status !== 0 && status !== 2) {
+            proxy.$modal.msgWarning("仅草稿或已签约状态的合同可以维护模型明细，已为您打开详情页")
+            router.replace({ path: contractBasePath.value + "/detail", query: { id } })
+            return
+          }
+          productsOnly.value = status === 2
+          applyDetail(data)
+          return
+        }
+        if (status !== 0) {
           proxy.$modal.msgWarning("仅草稿状态的合同可以编辑，已为您打开详情页")
           router.replace({ path: contractBasePath.value + "/detail", query: { id } })
           return
@@ -864,6 +931,10 @@ init()
 }
 
 .section-card {
+  margin-bottom: 14px;
+}
+
+.mode-alert {
   margin-bottom: 14px;
 }
 

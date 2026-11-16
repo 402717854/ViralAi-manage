@@ -128,10 +128,22 @@ public enum ContractStatusEnum
         return allowed != null && allowed.contains(target);
     }
 
-    /** 是否允许编辑主信息与明细：仅草稿 */
+    /** 是否允许编辑主信息：仅草稿（合同名称、签约主体、到期时间、备注） */
     public boolean isEditable()
     {
         return this == DRAFT;
+    }
+
+    /**
+     * 是否允许维护模型明细：草稿与已签约
+     *
+     * <p>已签约合同在履约过程中可能新增渠道模型或调整折扣，需要允许变更明细；
+     * 主信息仍然受 {@link #isEditable()} 限制，已签约合同不可改合同名称、签约主体与到期时间。
+     * 已到期、已作废、已归档合同为只读。</p>
+     */
+    public boolean isProductEditable()
+    {
+        return this == DRAFT || this == SIGNED;
     }
 
     /** 是否允许删除：仅草稿 */

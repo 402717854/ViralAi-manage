@@ -95,6 +95,7 @@
               type="warning"
               plain
               icon="Download"
+              :loading="exportLoading.usage"
               @click="handleExport"
               v-hasPermi="['crm:usage:export']"
             >导出</el-button>
@@ -239,6 +240,7 @@
               v-model="logDateRange"
               value-format="YYYY-MM-DD"
               type="daterange"
+              :clearable="false"
               range-separator="-"
               start-placeholder="开始日期"
               end-placeholder="结束日期"
@@ -263,9 +265,19 @@
           </el-col>
           <el-col :span="1.5">
             <el-button
+              type="success"
+              plain
+              icon="Upload"
+              @click="openUpload"
+              v-hasPermi="['crm:usage:ingest']"
+            >上传流水</el-button>
+          </el-col>
+          <el-col :span="1.5">
+            <el-button
               type="warning"
               plain
               icon="Download"
+              :loading="exportLoading.callLog"
               @click="handleLogExport"
               v-hasPermi="['crm:usage:export']"
             >导出流水</el-button>
@@ -432,9 +444,102 @@
       </template>
     </el-dialog>
 
+    <!-- 上传流水 -->
+    <el-dialog title="上传网关原始流水" v-model="uploadOpen" width="620px" append-to-body>
+      <el-form :model="uploadForm" :rules="uploadRules" ref="uploadRef" label-width="110px">
+        <el-form-item label="客户" prop="customerId">
+          <el-select
+            v-model="uploadForm.customerId"
+            placeholder="请选择流水归属客户"
+            filterable
+            clearable
+            :loading="customerLoading"
+            style="width: 100%"
+            @change="handleUploadCustomerChange"
+          >
+            <el-option v-for="item in customerOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+          <div class="form-tip">客户 → 渠道 → 账户 按该客户已签约合同的明细联动，一个文件归属一个客户</div>
+        </el-form-item>
+        <el-form-item label="渠道" prop="supplierId">
+          <el-select
+            v-model="uploadForm.supplierId"
+            :placeholder="uploadForm.customerId ? '请选择流水所属渠道' : '请先选择客户'"
+            filterable
+            :disabled="!uploadForm.customerId"
+            :loading="uploadSupplierLoading"
+            style="width: 100%"
+            @change="handleUploadSupplierChange"
+          >
+            <el-option
+              v-for="item in uploadSupplierOptions"
+              :key="item.supplierId"
+              :label="item.supplierName"
+              :value="item.supplierId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="渠道账户" prop="supplierAccountId">
+          <el-select
+            v-model="uploadForm.supplierAccountId"
+            :placeholder="uploadForm.supplierId ? '请选择渠道账户' : '请先选择渠道'"
+            filterable
+            :disabled="!uploadForm.supplierId"
+            :loading="uploadAccountLoading"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in uploadAccountOptions"
+              :key="item.supplierAccountId"
+              :label="`${item.supplierAccountName}${item.pullType === 2 ? '（文件上传）' : ''}${item.accountStatus === 0 ? '（已停用）' : ''}`"
+              :value="item.supplierAccountId"
+            />
+          </el-select>
+          <div class="form-tip">账户取自客户合同明细；合同未绑定账户时列出该渠道的启用账户</div>
+        </el-form-item>
+        <el-form-item label="流水文件">
+          <el-upload
+            ref="uploadFileRef"
+            :limit="1"
+            :auto-upload="false"
+            accept=".xlsx,.xls"
+            :on-change="handleUploadFileChange"
+            :on-remove="handleUploadFileRemove"
+            :on-exceed="handleUploadFileExceed"
+            drag
+            style="width: 100%"
+          >
+            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <div class="el-upload__text">将文件拖到此处，或<em>点击选择</em></div>
+            <template #tip>
+              <div class="el-upload__tip">
+                仅支持 xls / xlsx，单次最多 20000 行，文件不超过 10MB；
+                <el-link type="primary" :underline="false" style="font-size: 12px" @click="handleUploadTemplate">下载模板</el-link>
+              </div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="入库后对账">
+          <el-switch v-model="uploadForm.autoReconcile" />
+          <span class="form-tip">按文件内调用时间区间立即对账，生成台账并匹配合同</span>
+        </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="客户 / 渠道 / 账户取自该客户已签约合同的明细，流水按此归属入库；按流水号幂等，模型解析不出来的行不入库。"
+        />
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button type="primary" @click="submitUpload" :loading="uploadSubmitting">开始上传</el-button>
+          <el-button @click="uploadOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 台账详情 -->
-    <el-dialog title="用量明细" v-model="usageOpen" width="820px" append-to-body>
-      <el-descriptions :column="2" border v-if="usageDetail">
+    <el-dialog title="用量明细" v-model="usageOpen" width="820px" append-to-body>      <el-descriptions :column="2" border v-if="usageDetail">
         <el-descriptions-item label="流水号" :span="2">{{ usageDetail.callNo }}</el-descriptions-item>
         <el-descriptions-item label="客户">{{ usageDetail.customerName || "-" }}</el-descriptions-item>
         <el-descriptions-item label="渠道">{{ usageDetail.supplierName || "-" }}</el-descriptions-item>
@@ -473,8 +578,17 @@ import {
   reconcileUsage,
   rematchUsage,
   listCallLog,
-  pullCallLog
+  pullCallLog,
+  uploadCallLog,
+  getCustomerSupplierAccounts
 } from "@/api/crm/usage"
+import {
+  submitGatewayLogExport,
+  submitUsageExport,
+  getExportTask,
+  downloadExportFile
+} from "@/api/crm/exportTask"
+import { saveAs } from "file-saver"
 import { getSupplierOptions } from "@/api/crm/supplier"
 import { listSupplierAccount } from "@/api/crm/supplierAccount"
 import { getCustomerOptions } from "@/api/crm/customer"
@@ -492,7 +606,14 @@ const callLogList = ref([])
 const total = ref(0)
 const logTotal = ref(0)
 const dateRange = ref([])
-const logDateRange = ref([])
+/** 网关原始流水默认只看前一天（昨日 00:00:00 ~ 23:59:59），与后端默认区间保持一致 */
+function defaultLogDateRange() {
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const day = parseTime(yesterday, "{y}-{m}-{d}")
+  return [day, day]
+}
+const logDateRange = ref(defaultLogDateRange())
 const supplierOptions = ref([])
 const supplierLoading = ref(false)
 const customerOptions = ref([])
@@ -560,7 +681,10 @@ function getList() {
 
 function getCallLogList() {
   logLoading.value = true
-  const query = proxy.addDateRange({ ...logQuery.value, params: {} }, logDateRange.value)
+  // 日期被清空时回到「前一天」，保证列表永远是受限区间而不是全量
+  const range = logDateRange.value && logDateRange.value.length === 2 ? logDateRange.value : defaultLogDateRange()
+  logDateRange.value = range
+  const query = proxy.addDateRange({ ...logQuery.value, params: {} }, range)
   listCallLog(query).then(res => {
     callLogList.value = res.rows || []
     logTotal.value = res.total || 0
@@ -594,7 +718,7 @@ function handleLogQuery() {
 }
 
 function resetLogQuery() {
-  logDateRange.value = []
+  logDateRange.value = defaultLogDateRange()
   logQuery.value = {
     pageNum: 1,
     pageSize: 10,
@@ -756,8 +880,224 @@ function submitPull() {
   })
 }
 
+/** 上传流水：人工上传网关导出的流水文件，按渠道 + 账户解析客户与模型后入库 */
+const uploadOpen = ref(false)
+const uploadSubmitting = ref(false)
+const uploadRef = ref()
+const uploadFileRef = ref()
+const uploadFile = ref(null)
+const uploadAccountLoading = ref(false)
+const uploadSupplierLoading = ref(false)
+const uploadAccountOptions = ref([])
+const uploadSupplierOptions = ref([])
+/** 客户合同里的「渠道 + 渠道账户」组合，作为渠道、账户两级下拉的数据源 */
+const uploadCombos = ref([])
+/** 客户快速切换时，只接受最后一次请求的响应，避免旧响应覆盖新客户的渠道 */
+let uploadComboSeq = 0
+/** 渠道快速切换时同理，兜底账户请求只认最后一次 */
+let uploadAccountSeq = 0
+const uploadForm = ref({
+  customerId: undefined,
+  supplierId: undefined,
+  supplierAccountId: undefined,
+  autoReconcile: true
+})
+
+const uploadRules = {
+  customerId: [{ required: true, message: "请选择流水归属客户", trigger: "change" }],
+  supplierId: [{ required: true, message: "请选择流水所属渠道", trigger: "change" }],
+  supplierAccountId: [{ required: true, message: "请选择渠道账户", trigger: "change" }]
+}
+
+function openUpload() {
+  // 重开弹窗时作废上一轮在途请求，避免旧响应回填到空表单
+  uploadComboSeq++
+  uploadAccountSeq++
+  uploadForm.value = {
+    customerId: undefined,
+    supplierId: undefined,
+    supplierAccountId: undefined,
+    autoReconcile: true
+  }
+  uploadFile.value = null
+  uploadCombos.value = []
+  uploadSupplierOptions.value = []
+  uploadAccountOptions.value = []
+  uploadOpen.value = true
+  nextTick(() => {
+    uploadRef.value && uploadRef.value.clearValidate()
+    uploadFileRef.value && uploadFileRef.value.clearFiles()
+  })
+}
+
+/** 选客户：渠道与账户都来自该客户生效合同的明细行，因此客户一变必须重算并清空下游 */
+function handleUploadCustomerChange() {
+  // 作废在途请求：客户被清空或快速切换时，旧响应不能落到新客户的下拉上
+  const seq = ++uploadComboSeq
+  uploadForm.value.supplierId = undefined
+  uploadForm.value.supplierAccountId = undefined
+  uploadCombos.value = []
+  uploadSupplierOptions.value = []
+  uploadAccountOptions.value = []
+  const customerId = uploadForm.value.customerId
+  if (!customerId) {
+    uploadSupplierLoading.value = false
+    return
+  }
+  uploadSupplierLoading.value = true
+  getCustomerSupplierAccounts(customerId).then(res => {
+    if (seq !== uploadComboSeq) {
+      return
+    }
+    const list = res.data || []
+    uploadCombos.value = list
+    const supplierMap = new Map()
+    list.forEach(item => {
+      if (item.supplierId && !supplierMap.has(item.supplierId)) {
+        supplierMap.set(item.supplierId, {
+          supplierId: item.supplierId,
+          supplierName: item.supplierName || `渠道${item.supplierId}`
+        })
+      }
+    })
+    uploadSupplierOptions.value = Array.from(supplierMap.values())
+    if (!list.length) {
+      proxy.$modal.msgWarning("该客户暂无已签约合同，请先在合同明细中配置渠道与账户")
+    }
+  }).finally(() => {
+    if (seq === uploadComboSeq) {
+      uploadSupplierLoading.value = false
+    }
+  })
+}
+
+/** 选渠道：账户只取该客户在这个渠道合同明细上的账户（去重） */
+function handleUploadSupplierChange() {
+  const seq = ++uploadAccountSeq
+  uploadForm.value.supplierAccountId = undefined
+  uploadAccountOptions.value = []
+  const supplierId = uploadForm.value.supplierId
+  if (!supplierId) {
+    uploadAccountLoading.value = false
+    return
+  }
+  const seen = new Set()
+  const options = []
+  uploadCombos.value.filter(item => item.supplierId === supplierId).forEach(item => {
+    if (!item.supplierAccountId || seen.has(item.supplierAccountId)) {
+      return
+    }
+    seen.add(item.supplierAccountId)
+    options.push({
+      supplierAccountId: item.supplierAccountId,
+      supplierAccountName: item.supplierAccountName || `账户${item.supplierAccountId}`,
+      accountStatus: item.accountStatus,
+      pullType: item.pullType
+    })
+  })
+  if (options.length) {
+    uploadAccountOptions.value = options
+    return
+  }
+  // 历史合同明细未绑定账户时，回退到该渠道的启用账户，避免老合同无法上传
+  loadUploadFallbackAccounts(supplierId, seq)
+}
+
+/** 合同明细没有账户时的兜底：取该渠道启用账户，字段与合同组合对齐，模板无需分支 */
+function loadUploadFallbackAccounts(supplierId, seq) {
+  uploadAccountLoading.value = true
+  listSupplierAccount({ pageNum: 1, pageSize: 500, status: 1, supplierId })
+    .then(res => {
+      if (seq !== uploadAccountSeq) {
+        return
+      }
+      uploadAccountOptions.value = (res.rows || []).map(item => ({
+        supplierAccountId: item.id,
+        supplierAccountName: item.accountName,
+        accountStatus: item.status,
+        pullType: item.pullType
+      }))
+    })
+    .finally(() => {
+      if (seq === uploadAccountSeq) {
+        uploadAccountLoading.value = false
+      }
+    })
+}
+
+function handleUploadFileChange(file) {
+  uploadFile.value = file
+}
+
+function handleUploadFileRemove() {
+  uploadFile.value = null
+}
+
+/** 只允许一个文件：重新选择时覆盖上一个，避免误传多个文件 */
+function handleUploadFileExceed(files) {
+  const el = uploadFileRef.value
+  if (!el) {
+    return
+  }
+  el.clearFiles()
+  const file = files[0]
+  file.uid = Date.now()
+  el.handleStart(file)
+}
+
+function handleUploadTemplate() {
+  proxy.download("crm/gateway-call-log/upload-template", {}, `网关原始流水导入模板_${new Date().getTime()}.xlsx`)
+}
+
+function submitUpload() {
+  uploadRef.value.validate(valid => {
+    if (!valid) {
+      return
+    }
+    const raw = uploadFile.value && uploadFile.value.raw
+    if (!raw) {
+      proxy.$modal.msgError("请选择要上传的流水文件")
+      return
+    }
+    const formData = new FormData()
+    formData.append("file", raw)
+    formData.append("customerId", uploadForm.value.customerId)
+    formData.append("supplierId", uploadForm.value.supplierId)
+    formData.append("supplierAccountId", uploadForm.value.supplierAccountId)
+    formData.append("autoReconcile", uploadForm.value.autoReconcile ? "true" : "false")
+    uploadSubmitting.value = true
+    uploadCallLog(formData).then(res => {
+      const r = res.data || {}
+      let msg = res.msg || "上传完成"
+      if (r.reconcile) {
+        msg += `；已对账：新增台账 ${r.reconcile.created || 0} 条，匹配成功 ${r.reconcile.matched || 0} 条，异常 ${r.reconcile.abnormal || 0} 条`
+      }
+      proxy.$modal.msgSuccess(msg)
+      // 未入库的行按原因给出样例，便于直接去「流水映射配置」补规则或修文件
+      const warnings = []
+      if (r.missingModel > 0 && r.missingModelSample && r.missingModelSample.length) {
+        warnings.push(`缺模型编码 ${r.missingModel} 条，样例：${r.missingModelSample.join("、")}`)
+      }
+      if (r.invalid > 0 && r.rowErrors && r.rowErrors.length) {
+        warnings.push(`无效行 ${r.invalid} 条，前 ${r.rowErrors.length} 条：${r.rowErrors.join("；")}`)
+      }
+      if (warnings.length) {
+        proxy.$alert(warnings.join("<br/>"), "部分数据未入库", { type: "warning", dangerouslyUseHTMLString: true })
+      }
+      uploadOpen.value = false
+      getCallLogList()
+      getList()
+    }).catch(() => {
+      // 失败提示由请求拦截器统一弹出后端 msg，这里不重复提示
+    }).finally(() => {
+      uploadSubmitting.value = false
+    })
+  })
+}
+
 /** 单条重新匹配 */
-function handleRematch(row) {  proxy.$modal.confirm(`确认重新匹配流水【${row.callNo}】？`).then(() => {
+function handleRematch(row) {
+  proxy.$modal.confirm(`确认重新匹配流水【${row.callNo}】？`).then(() => {
     return rematchUsage(row.id)
   }).then(() => {
     proxy.$modal.msgSuccess("匹配成功，已按当前生效合同计费")
@@ -776,14 +1116,119 @@ function handleViewUsage(row) {
   })
 }
 
+/** 异步导出：提交任务 → 轮询 → 自动下载；台账与流水共用一套流程 */
+const exportLoading = ref({ usage: false, callLog: false })
+/** 在途轮询定时器，页面卸载时统一清理，避免离开页面后仍在打接口 */
+const exportPollTimers = new Set()
+const EXPORT_POLL_INTERVAL = 2000
+const EXPORT_POLL_TIMEOUT = 10 * 60 * 1000
+
 function handleExport() {
-  proxy.download("crm/usage/export", buildQuery(), `对账台账_${new Date().getTime()}.xlsx`)
+  submitAsyncExport("usage", submitUsageExport, buildQuery())
 }
 
 function handleLogExport() {
-  const query = proxy.addDateRange({ ...logQuery.value, params: {} }, logDateRange.value)
-  proxy.download("crm/gateway-call-log/export", query, `网关调用流水_${new Date().getTime()}.xlsx`)
+  // 与列表同口径：导出同样限定调用时间区间，缺失时按前一天
+  const range = logDateRange.value && logDateRange.value.length === 2 ? logDateRange.value : defaultLogDateRange()
+  const query = proxy.addDateRange({ ...logQuery.value, params: {} }, range)
+  submitAsyncExport("callLog", submitGatewayLogExport, query)
 }
+
+/** 业务侧错误：请求拦截器不会提示，由导出流程统一弹出 */
+function exportError(message) {
+  const error = new Error(message)
+  error.exportHandled = true
+  return error
+}
+
+/**
+ * 提交异步导出任务并等待结果
+ *
+ * @param {string} key 按钮状态键（usage / callLog）
+ * @param {Function} submitter 提交接口
+ * @param {object} query 查询条件
+ */
+async function submitAsyncExport(key, submitter, query) {
+  if (exportLoading.value[key]) {
+    return
+  }
+  exportLoading.value[key] = true
+  try {
+    const res = await submitter(query)
+    const taskId = res.data
+    if (!taskId) {
+      throw exportError("导出任务提交失败，请稍后重试")
+    }
+    proxy.$modal.msgSuccess(res.msg || "导出任务已提交，生成完成后会自动下载")
+    const task = await pollExportTask(taskId)
+    await downloadExportTask(task)
+    proxy.$modal.msgSuccess(`导出完成${task.rowCount ? `，共 ${task.rowCount} 条` : ""}`)
+  } catch (e) {
+    // 网络/超时/业务码错误拦截器已提示过，这里只补业务侧自定义错误，避免重复弹窗
+    if (e && e.exportHandled) {
+      proxy.$modal.msgError(e.message)
+    }
+  } finally {
+    exportLoading.value[key] = false
+  }
+}
+
+/**
+ * 轮询任务状态：0待处理 / 1处理中继续等，2成功返回任务，3失败或超时抛错
+ *
+ * @param {number} taskId 任务ID
+ * @returns {Promise<object>} 成功后的任务
+ */
+function pollExportTask(taskId) {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    const timer = setInterval(() => {
+      getExportTask(taskId).then(res => {
+        const task = res.data || {}
+        if (task.status === 2) {
+          finishPoll(timer)
+          resolve(task)
+        } else if (task.status === 3) {
+          finishPoll(timer)
+          reject(exportError(task.errMsg || "导出失败，请稍后重试"))
+        } else if (Date.now() - startedAt > EXPORT_POLL_TIMEOUT) {
+          finishPoll(timer)
+          reject(exportError("导出耗时较长，请稍后重新发起导出"))
+        }
+      }).catch(e => {
+        finishPoll(timer)
+        reject(e)
+      })
+    }, EXPORT_POLL_INTERVAL)
+    exportPollTimers.add(timer)
+  })
+}
+
+function finishPoll(timer) {
+  clearInterval(timer)
+  exportPollTimers.delete(timer)
+}
+
+/** 下载结果文件；后端异常时 blob 里其实是 JSON 错误体，需要还原成可读提示 */
+async function downloadExportTask(task) {
+  const data = await downloadExportFile(task.id)
+  if (!(data instanceof Blob) || !data.type || data.type.indexOf("json") > -1) {
+    let message = "导出文件下载失败，请稍后重试"
+    try {
+      const body = JSON.parse(await data.text())
+      message = body.msg || message
+    } catch (ignore) {
+      // 保留默认提示
+    }
+    throw exportError(message)
+  }
+  saveAs(new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), task.fileName || `导出数据_${Date.now()}.xlsx`)
+}
+
+onBeforeUnmount(() => {
+  exportPollTimers.forEach(timer => clearInterval(timer))
+  exportPollTimers.clear()
+})
 
 function loadSupplierOptions() {
   supplierLoading.value = true

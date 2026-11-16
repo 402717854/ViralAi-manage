@@ -23,7 +23,8 @@ import com.ruoyi.crm.service.ICrmContractProductService;
 /**
  * 合同模型产品明细Controller
  *
- * <p>明细维护仅草稿状态可用；渠道归属、折扣区间、重复模型与 JSON 合法性均由后端强校验。</p>
+ * <p>明细维护在草稿与已签约状态下可用；渠道归属、折扣区间、重复模型与 JSON 合法性均由后端强校验。
+ * 已签约合同的明细变更即时生效并写入操作日志，历史对账台账按原折扣快照结算不受影响。</p>
  *
  * <pre>
  * GET    /crm/contract-product/list/{contractId}   明细列表
@@ -64,7 +65,9 @@ public class CrmContractProductController extends BaseController
         {
             return error("合同ID不能为空");
         }
-        return toAjax(crmContractProductService.batchSaveContractProduct(vo.getContractId(), vo.getList()));
+        // 失败以 ServiceException 抛出；草稿允许提交空明细（清空全部），故不再以影响行数判定成败
+        crmContractProductService.batchSaveContractProduct(vo.getContractId(), vo.getList());
+        return success();
     }
 
     /**

@@ -7,7 +7,8 @@ import com.ruoyi.crm.dto.CrmContractProductDto;
 /**
  * 合同模型产品明细Service接口
  *
- * <p>明细维护仅在合同草稿状态可用，且强制校验明细产品归属合同渠道。</p>
+ * <p>明细维护在合同草稿与已签约状态可用，且强制校验明细产品归属合同渠道；
+ * 已签约合同变更明细即时生效并写入操作日志。</p>
  *
  * @author ruoyi
  * @date 2026-11-04

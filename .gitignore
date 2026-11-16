@@ -55,3 +55,7 @@ nbdist/
 .env.local
 .env.prod
 docker-compose.override.yml
+.workbuddy
+.idea
+*.tar
+
