@@ -6,6 +6,7 @@ import com.ruoyi.crm.domain.CrmCustomer;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.util.Date;
 
 @Getter
@@ -57,4 +58,7 @@ public class CrmCustomerDto{
     private Date createTime;
 
     private Date updateTime;
+
+    /** 账户余额（只读，来自 crm_customer_account；无账户时为 0） */
+    private BigDecimal accountBalance;
 }

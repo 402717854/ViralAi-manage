@@ -43,11 +43,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select a.id, a.name, a.follow_up_status, a.contact_last_time, a.contact_last_content, a.contact_next_time,
         a.owner_user, a.owner_time, a.lock_status, a.status, a.mobile, a.telephone, a.qq, a.wechat, a.email,
         a.area_id, a.detail_address, a.industry_id, a.level, a.source, a.remark, a.create_time,
-        a.update_time, a.deleted, a.tenant_id,e.user_name as creator,c.user_name as updater,a.industry
+        a.update_time, a.deleted, a.tenant_id,e.user_name as creator,c.user_name as updater,a.industry,
+        ifnull(acc.balance, 0) as account_balance
         from crm_customer a
             left join sys_user b on a.owner_user=b.user_id
             left join sys_user c on a.updater=c.user_id
             left join sys_user e on a.creator=e.user_id
+            left join crm_customer_account acc on acc.customer_id = a.id
         <where>
             a.deleted =0
             <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>

@@ -1,5 +1,6 @@
 package com.ruoyi.crm.mapper;
 
+import java.math.BigDecimal;
 import java.util.Date;
 import java.util.List;
 
@@ -63,6 +64,36 @@ public interface CrmContractBillMapper
                                @Param("remark") String remark,
                                @Param("auditor") Long auditor,
                                @Param("auditTime") Date auditTime);
+
+    /**
+     * 更新账单结算信息（仅当账单处于期望状态时生效）
+     *
+     * @param id 账单ID
+     * @param expectedStatus 期望的当前状态
+     * @param settleType 结算方式
+     * @param settledAmount 实结金额
+     * @param fundFlowId 资金流水ID
+     * @param settleTime 结算时间
+     * @param remark 备注
+     * @return 影响行数，0 表示状态已变更（重复结算）
+     */
+    public int updateBillSettle(@Param("id") Long id,
+                                @Param("expectedStatus") Integer expectedStatus,
+                                @Param("settleType") Integer settleType,
+                                @Param("settledAmount") BigDecimal settledAmount,
+                                @Param("fundFlowId") Long fundFlowId,
+                                @Param("settleTime") Date settleTime,
+                                @Param("remark") String remark);
+
+    /**
+     * 撤销结算：已结算 → 已确认，清空结算信息
+     *
+     * @param id 账单ID
+     * @param remark 备注
+     * @return 影响行数
+     */
+    public int updateBillSettleCancel(@Param("id") Long id,
+                                      @Param("remark") String remark);
 
     /**
      * 统计某合同某渠道某账期已生成的账单数（用于标记补充账单）

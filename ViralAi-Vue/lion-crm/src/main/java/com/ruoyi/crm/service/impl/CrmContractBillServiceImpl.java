@@ -19,29 +19,35 @@ import com.ruoyi.crm.domain.CrmContractBill;
 import com.ruoyi.crm.domain.CrmContractBillDiff;
 import com.ruoyi.crm.domain.CrmContractBillSub;
 import com.ruoyi.crm.domain.CrmContractUsage;
+import com.ruoyi.crm.domain.CrmCustomerAccountFlow;
 import com.ruoyi.crm.dto.CrmBillAuditVo;
 import com.ruoyi.crm.dto.CrmBillDailyGroupDto;
 import com.ruoyi.crm.dto.CrmBillDiffHandleVo;
 import com.ruoyi.crm.dto.CrmBillGenerateResultVo;
 import com.ruoyi.crm.dto.CrmBillGenerateVo;
 import com.ruoyi.crm.dto.CrmBillGroupDto;
+import com.ruoyi.crm.dto.CrmBillSettlePreviewVo;
+import com.ruoyi.crm.dto.CrmBillSettleResultVo;
+import com.ruoyi.crm.dto.CrmBillSettleVo;
 import com.ruoyi.crm.dto.CrmBillUsageItemDto;
 import com.ruoyi.crm.dto.CrmContractBillDetailVo;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
 import com.ruoyi.crm.dto.CrmContractBillDto;
 import com.ruoyi.crm.dto.CrmContractBillSubDto;
+import com.ruoyi.crm.dto.CrmFundChangeCmd;
 import com.ruoyi.crm.enums.BillDiffHandleStatusEnum;
 import com.ruoyi.crm.enums.ContractBillStatusEnum;
+import com.ruoyi.crm.enums.CustomerFundBizTypeEnum;
 import com.ruoyi.crm.enums.UsageMatchStatusEnum;
-import com.ruoyi.crm.mapper.CrmBusinessMapper;
 import com.ruoyi.crm.mapper.CrmContractBillDiffMapper;
 import com.ruoyi.crm.mapper.CrmContractBillMapper;
 import com.ruoyi.crm.mapper.CrmContractBillSubMapper;
-import com.ruoyi.crm.mapper.CrmContractMapper;
 import com.ruoyi.crm.mapper.CrmContractUsageMapper;
+import com.ruoyi.crm.mapper.CrmCustomerAccountFlowMapper;
 import com.ruoyi.crm.service.ICrmContractBillService;
 import com.ruoyi.crm.service.support.CrmBillCycleUtils;
 import com.ruoyi.crm.service.support.CrmBillNoGenerator;
+import com.ruoyi.crm.service.support.CrmCustomerFundLedger;
 import com.ruoyi.crm.service.support.CrmFinanceDataScope;
 
 /**
@@ -62,6 +68,12 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
     /** 系统任务生成账单时的默认创建人（admin），避免无登录上下文写入 null */
     private static final Long SYSTEM_USER_ID = 1L;
 
+    /** 结算方式：资金扣减（从客户余额划扣） */
+    private static final int SETTLE_BY_FUND = 1;
+
+    /** 结算方式：线下收款（只登记结算结果，不动余额） */
+    private static final int SETTLE_BY_OFFLINE = 2;
+
     @Autowired
     private CrmContractBillMapper crmContractBillMapper;
 
@@ -75,16 +87,16 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
     private CrmContractBillSubMapper crmContractBillSubMapper;
 
     @Autowired
-    private CrmContractMapper crmContractMapper;
-
-    @Autowired
-    private CrmBusinessMapper crmBusinessMapper;
-
-    @Autowired
     private CrmBillNoGenerator crmBillNoGenerator;
 
     @Autowired
     private CrmFinanceDataScope crmFinanceDataScope;
+
+    @Autowired
+    private CrmCustomerFundLedger crmCustomerFundLedger;
+
+    @Autowired
+    private CrmCustomerAccountFlowMapper crmCustomerAccountFlowMapper;
 
     @Override
     public List<CrmContractBillDto> selectCrmContractBillList(CrmContractBillDto query)
@@ -216,7 +228,7 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public int settle(Long billId)
+    public CrmBillSettleResultVo settle(Long billId, CrmBillSettleVo vo)
     {
         if (billId == null)
         {
@@ -228,14 +240,153 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
             throw new ServiceException("账单不存在");
         }
         crmFinanceDataScope.assertSupplierAccessible(bill.getSupplierId());
+        if (ContractBillStatusEnum.SETTLED.getCode().equals(bill.getBillStatus()))
+        {
+            throw new ServiceException("账单已结算，请勿重复操作");
+        }
         if (!ContractBillStatusEnum.CONFIRMED.getCode().equals(bill.getBillStatus()))
         {
             throw new ServiceException("仅「已确认」的账单可以结算");
         }
-        int rows = crmContractBillMapper.updateBillAudit(billId, ContractBillStatusEnum.SETTLED.getCode(),
-                bill.getRemark(), currentUserId(), new Date());
-        writeBackBusinessSettle(bill.getContractId());
-        return rows;
+
+        int settleType = (vo == null || vo.getSettleType() == null) ? SETTLE_BY_FUND : vo.getSettleType();
+        if (settleType != SETTLE_BY_FUND && settleType != SETTLE_BY_OFFLINE)
+        {
+            throw new ServiceException("结算方式不合法");
+        }
+
+        BigDecimal billAmount = bill.getTotalSellAmount() == null ? BigDecimal.ZERO : bill.getTotalSellAmount();
+        BigDecimal settledAmount = (vo == null || vo.getSettledAmount() == null) ? billAmount : vo.getSettledAmount();
+        // 符号必须与账单一致：正账单不能填负数（否则会把扣款变成退款），负数账单必须填负数
+        if (billAmount.compareTo(BigDecimal.ZERO) > 0 && settledAmount.compareTo(BigDecimal.ZERO) < 0)
+        {
+            throw new ServiceException("实结金额不能为负数");
+        }
+        if (billAmount.compareTo(BigDecimal.ZERO) < 0 && settledAmount.compareTo(BigDecimal.ZERO) > 0)
+        {
+            throw new ServiceException("负数账单的实结金额必须为负数");
+        }
+        String remark = vo == null || StringUtils.isEmpty(vo.getRemark()) ? bill.getRemark() : vo.getRemark();
+
+        CrmCustomerAccountFlow flow = null;
+        if (settleType == SETTLE_BY_FUND && settledAmount.compareTo(BigDecimal.ZERO) != 0)
+        {
+            boolean isReverse = settledAmount.compareTo(BigDecimal.ZERO) < 0;
+            CustomerFundBizTypeEnum bizType = isReverse
+                    ? CustomerFundBizTypeEnum.REVERSE : CustomerFundBizTypeEnum.SETTLE_DEDUCT;
+            CrmFundChangeCmd cmd = CrmFundChangeCmd.of(bill.getCustomerId(), bizType.getCode(),
+                    bill.getId(), settledAmount.abs());
+            cmd.setBizNo(bill.getBillNo());
+            cmd.setBillId(bill.getId());
+            cmd.setBillNo(bill.getBillNo());
+            cmd.setContractId(bill.getContractId());
+            cmd.setRemark((isReverse ? "负数账单结算退回 " : "账单结算扣款 ") + bill.getBillNo());
+            // 余额不足由账本抛出「客户可用余额不足」，前端据此提示切换线下收款
+            flow = crmCustomerFundLedger.change(cmd);
+        }
+
+        Date now = new Date();
+        int rows = crmContractBillMapper.updateBillSettle(bill.getId(),
+                ContractBillStatusEnum.CONFIRMED.getCode(), settleType, settledAmount,
+                flow == null ? null : flow.getId(), now, remark);
+        if (rows == 0)
+        {
+            throw new ServiceException("账单状态已变更，请刷新后重试");
+        }
+
+        CrmBillSettleResultVo result = new CrmBillSettleResultVo();
+        result.setBillId(bill.getId());
+        result.setBillNo(bill.getBillNo());
+        result.setSettleType(settleType);
+        result.setBillAmount(billAmount);
+        result.setDeductAmount(settledAmount.abs());
+        result.setSettleTime(now);
+        if (flow != null)
+        {
+            result.setFundFlowId(flow.getId());
+            result.setFundFlowNo(flow.getFlowNo());
+            result.setBalanceBefore(flow.getBalanceBefore());
+            result.setBalanceAfter(flow.getBalanceAfter());
+        }
+        return result;
+    }
+
+    @Override
+    public CrmBillSettlePreviewVo previewSettle(Long billId)
+    {
+        if (billId == null)
+        {
+            throw new ServiceException("账单ID不能为空");
+        }
+        CrmContractBill bill = crmContractBillMapper.selectCrmContractBillById(billId);
+        if (bill == null)
+        {
+            throw new ServiceException("账单不存在");
+        }
+        crmFinanceDataScope.assertSupplierAccessible(bill.getSupplierId());
+
+        CrmBillSettlePreviewVo preview = new CrmBillSettlePreviewVo();
+        preview.setBillId(bill.getId());
+        preview.setBillNo(bill.getBillNo());
+        preview.setCustomerId(bill.getCustomerId());
+        CrmContractBillDto detail = crmContractBillMapper.selectCrmContractBillDetail(billId);
+        preview.setCustomerName(detail == null ? null : detail.getCustomerName());
+        preview.setBillAmount(bill.getTotalSellAmount() == null ? BigDecimal.ZERO : bill.getTotalSellAmount());
+        preview.setAvailableBalance(crmCustomerFundLedger.availableBalance(bill.getCustomerId()));
+        preview.setSettleable(ContractBillStatusEnum.CONFIRMED.getCode().equals(bill.getBillStatus()));
+        return preview;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelSettle(Long billId, String remark)
+    {
+        if (billId == null)
+        {
+            throw new ServiceException("账单ID不能为空");
+        }
+        CrmContractBill bill = crmContractBillMapper.selectCrmContractBillById(billId);
+        if (bill == null)
+        {
+            throw new ServiceException("账单不存在");
+        }
+        crmFinanceDataScope.assertSupplierAccessible(bill.getSupplierId());
+        if (!ContractBillStatusEnum.SETTLED.getCode().equals(bill.getBillStatus()))
+        {
+            throw new ServiceException("仅「已结算」的账单可以撤销结算");
+        }
+        String cancelRemark = StringUtils.isNotEmpty(remark) ? remark : "结算撤销";
+
+        // 反查该账单产生的资金流水，按反方向红冲：
+        // 正常扣款 → 退款回账户；负数账单退回 → 把钱扣回（余额已被花掉时会因余额不足失败，属预期）
+        CrmCustomerAccountFlow origin = crmCustomerAccountFlowMapper
+                .selectByBiz(CustomerFundBizTypeEnum.SETTLE_DEDUCT.getCode(), billId);
+        if (origin == null)
+        {
+            origin = crmCustomerAccountFlowMapper
+                    .selectByBiz(CustomerFundBizTypeEnum.REVERSE.getCode(), billId);
+        }
+        if (origin != null)
+        {
+            boolean wasDeduct = CustomerFundBizTypeEnum.SETTLE_DEDUCT.getCode().equals(origin.getBizType());
+            CustomerFundBizTypeEnum reverseType = wasDeduct
+                    ? CustomerFundBizTypeEnum.SETTLE_CANCEL : CustomerFundBizTypeEnum.SETTLE_CANCEL_BACK;
+            CrmFundChangeCmd cmd = CrmFundChangeCmd.of(bill.getCustomerId(), reverseType.getCode(),
+                    origin.getId(), origin.getAmount());
+            cmd.setBizNo(bill.getBillNo());
+            cmd.setBillId(bill.getId());
+            cmd.setBillNo(bill.getBillNo());
+            cmd.setContractId(bill.getContractId());
+            cmd.setRemark((wasDeduct ? "结算撤销退回 " : "撤销负数账单退回 ") + bill.getBillNo()
+                    + (StringUtils.isNotEmpty(remark) ? "：" + remark : ""));
+            crmCustomerFundLedger.change(cmd);
+        }
+
+        int rows = crmContractBillMapper.updateBillSettleCancel(billId, cancelRemark);
+        if (rows == 0)
+        {
+            throw new ServiceException("账单状态已变更，请刷新后重试");
+        }
     }
 
     @Override
@@ -509,25 +660,6 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
         reverse.setRefUsageId(origin.getId());
         reverse.setCreateTime(new Date());
         crmContractUsageMapper.insertCrmContractUsage(reverse);
-    }
-
-    /**
-     * 结算完成后回写商机结算状态
-     *
-     * @param contractId 合同ID
-     */
-    private void writeBackBusinessSettle(Long contractId)
-    {
-        if (contractId == null)
-        {
-            return;
-        }
-        CrmContract contract = crmContractMapper.selectCrmContractById(contractId);
-        if (contract == null || contract.getBusId() == null)
-        {
-            return;
-        }
-        crmBusinessMapper.updateSettleStatus(contract.getBusId(), 1, currentUserId());
     }
 
     /**

@@ -26,9 +26,6 @@ public enum BusinessActionEnum
     /** 转合同 */
     CONVERT("CONVERT", "转合同"),
 
-    /** 结算回填 */
-    SETTLE("SETTLE", "结算回填"),
-
     /** 合同状态回写（合同签约 / 作废联动） */
     CONTACT("CONTACT", "合同状态回写"),
 

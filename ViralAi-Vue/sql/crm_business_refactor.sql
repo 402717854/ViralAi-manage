@@ -9,12 +9,12 @@
 
 -- ----------------------------
 -- 1、商机操作日志表
---    记录状态变更、产品清单维护、转合同、结算回填等关键动作，供详情页「操作日志」Tab 展示
+--    记录状态变更、产品清单维护、转合同等关键动作，供详情页「操作日志」Tab 展示
 -- ----------------------------
 create table if not exists crm_business_log (
   id                  bigint(20)      not null auto_increment    comment '主键',
   bus_id              bigint(20)      not null                   comment '商机ID',
-  action              varchar(32)     not null                   comment '操作类型 CREATE/UPDATE/STATUS/PRODUCT/CONVERT/SETTLE/DELETE',
+  action              varchar(32)     not null                   comment '操作类型 CREATE/UPDATE/STATUS/PRODUCT/CONVERT/CONTACT/DELETE',
   action_name         varchar(64)     default null               comment '操作名称',
   from_status         int(4)          default null               comment '变更前状态',
   to_status           int(4)          default null               comment '变更后状态',
@@ -128,18 +128,6 @@ insert into sys_dict_data (dict_sort, dict_label, dict_value, dict_type, css_cla
 select 2, '已签', '1', 'crm_bus_contact', '', 'success', 'N', '0', 'admin', sysdate(), '合同审批通过后自动回写'
 from dual where not exists (select 1 from sys_dict_data where dict_type = 'crm_bus_contact' and dict_value = '1');
 
-insert into sys_dict_type (dict_name, dict_type, status, create_by, create_time, remark)
-select '商机结算状态', 'crm_bus_settle', '0', 'admin', sysdate(), '商机对账结算标记'
-from dual where not exists (select 1 from sys_dict_type where dict_type = 'crm_bus_settle');
-
-insert into sys_dict_data (dict_sort, dict_label, dict_value, dict_type, css_class, list_class, is_default, status, create_by, create_time, remark)
-select 1, '未结算', '0', 'crm_bus_settle', '', 'info', 'Y', '0', 'admin', sysdate(), '默认值'
-from dual where not exists (select 1 from sys_dict_data where dict_type = 'crm_bus_settle' and dict_value = '0');
-
-insert into sys_dict_data (dict_sort, dict_label, dict_value, dict_type, css_class, list_class, is_default, status, create_by, create_time, remark)
-select 2, '已结算', '1', 'crm_bus_settle', '', 'success', 'N', '0', 'admin', sysdate(), '对账完成后回填'
-from dual where not exists (select 1 from sys_dict_data where dict_type = 'crm_bus_settle' and dict_value = '1');
-
 -- ----------------------------
 -- 5、菜单与按钮权限（幂等）
 --    说明：RuoYi 仅为目录型菜单递归生成子路由，隐藏页必须挂在目录（M）下才会生成路由，
@@ -243,14 +231,6 @@ select (select ifnull(max(menu_id), 0) + 1 from sys_menu), '商机转合同', @b
        1, 0, 'F', '0', '0', 'crm:business:convert', '#', 'admin', sysdate(), '', null, '成交商机一键生成草稿合同'
 from dual where @business_menu is not null
   and not exists (select 1 from sys_menu where perms = 'crm:business:convert');
-
-insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name,
-                      is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time,
-                      update_by, update_time, remark)
-select (select ifnull(max(menu_id), 0) + 1 from sys_menu), '商机结算回填', @business_menu, 8, '', '', '', '',
-       1, 0, 'F', '0', '0', 'crm:business:settle', '#', 'admin', sysdate(), '', null, '运营/管理回填结算状态'
-from dual where @business_menu is not null
-  and not exists (select 1 from sys_menu where perms = 'crm:business:settle');
 
 insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component, query, route_name,
                       is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time,

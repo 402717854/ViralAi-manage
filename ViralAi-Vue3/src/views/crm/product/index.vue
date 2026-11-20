@@ -213,7 +213,7 @@ const title = ref("")
 /** 复制来源描述：非空表示当前表单是「复制」而来，用于展示提示 */
 const copySource = ref("")
 
-const { crm_deleted,crm_bus_status,crm_bus_contact,crm_bus_settle } = useDict('crm_deleted','crm_bus_status','crm_bus_contact','crm_bus_settle')
+const { crm_deleted,crm_bus_status,crm_bus_contact } = useDict('crm_deleted','crm_bus_status','crm_bus_contact')
 
 /** 模型类型选项：取值与后端 CrmModelProduct#type 注释一致（1文本 2多模态 3图片处理 4音频处理 5视频处理） */
 const modelTypeOptions = [

@@ -20,7 +20,7 @@ public enum ContractBillStatusEnum
     /** 已确认：复核通过，可作为结算依据 */
     CONFIRMED(2, "已确认"),
 
-    /** 已结算：结算完成，回写商机 settle_status */
+    /** 已结算：结算完成（资金扣减 / 线下收款） */
     SETTLED(3, "已结算"),
 
     /** 差异挂起：存在未处理差异，暂缓结算 */

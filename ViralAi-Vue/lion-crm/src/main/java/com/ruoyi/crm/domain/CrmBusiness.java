@@ -46,9 +46,6 @@ public class CrmBusiness extends BaseEntity
     /** 合同状态0未签1已签 */
     private Integer contactStatus;
 
-    /** 结算状态0未结算1已结算 */
-    private Integer settleStatus;
-
     /** 合同金额 */
     private BigDecimal contactAmount;
 

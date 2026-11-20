@@ -6,6 +6,9 @@ import com.ruoyi.crm.dto.CrmBillAuditVo;
 import com.ruoyi.crm.dto.CrmBillDiffHandleVo;
 import com.ruoyi.crm.dto.CrmBillGenerateResultVo;
 import com.ruoyi.crm.dto.CrmBillGenerateVo;
+import com.ruoyi.crm.dto.CrmBillSettlePreviewVo;
+import com.ruoyi.crm.dto.CrmBillSettleResultVo;
+import com.ruoyi.crm.dto.CrmBillSettleVo;
 import com.ruoyi.crm.dto.CrmBillUsageItemDto;
 import com.ruoyi.crm.dto.CrmContractBillDetailVo;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
@@ -82,12 +85,30 @@ public interface ICrmContractBillService
     public int audit(CrmBillAuditVo vo);
 
     /**
-     * 账单结算：已确认 → 已结算，并回写商机结算状态
+     * 账单结算：已确认 → 已结算，按结算方式扣减客户余额或登记线下收款，
+     * 并回写商机结算状态
      *
      * @param billId 账单ID
-     * @return 结果
+     * @param vo 结算请求（可为空，默认资金扣减）
+     * @return 结算结果（含扣款前后余额）
      */
-    public int settle(Long billId);
+    public CrmBillSettleResultVo settle(Long billId, CrmBillSettleVo vo);
+
+    /**
+     * 结算预览：返回账单应付金额与客户可用余额，供结算弹窗预演
+     *
+     * @param billId 账单ID
+     * @return 预览
+     */
+    public CrmBillSettlePreviewVo previewSettle(Long billId);
+
+    /**
+     * 结算撤销：已结算 → 已确认，红冲资金流水并退回余额
+     *
+     * @param billId 账单ID
+     * @param remark 撤销原因
+     */
+    public void cancelSettle(Long billId, String remark);
 
     /**
      * 查询差异列表（内部应用渠道数据权限）

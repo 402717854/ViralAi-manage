@@ -87,18 +87,6 @@ public interface CrmBusinessMapper
                                @Param("updater") Long updater);
 
     /**
-     * 回填结算状态
-     *
-     * @param id 商机主键
-     * @param settleStatus 结算状态 0未结算 1已结算
-     * @param updater 更新人
-     * @return 结果
-     */
-    public int updateSettleStatus(@Param("id") Long id,
-                                  @Param("settleStatus") Integer settleStatus,
-                                  @Param("updater") Long updater);
-
-    /**
      * 回写合同签署状态（合同审批通过/作废时由合同模块调用）
      *
      * @param busId 商机主键

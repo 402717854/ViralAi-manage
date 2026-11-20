@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmCustomerFundAdjustMapper">
+
+    <resultMap type="CrmCustomerFundAdjust" id="CrmCustomerFundAdjustResult">
+        <result property="id"         column="id"          />
+        <result property="adjustNo"   column="adjust_no"   />
+        <result property="customerId" column="customer_id" />
+        <result property="amount"     column="amount"      />
+        <result property="direction"  column="direction"   />
+        <result property="reason"     column="reason"      />
+        <result property="creator"    column="creator"     />
+        <result property="createTime" column="create_time" />
+    </resultMap>
+
+    <insert id="insertAdjust" parameterType="CrmCustomerFundAdjust" useGeneratedKeys="true" keyProperty="id">
+        insert into crm_customer_fund_adjust
+            (adjust_no, customer_id, amount, direction, reason, creator, create_time)
+        values
+            (#{adjustNo}, #{customerId}, #{amount}, #{direction}, #{reason}, #{creator}, sysdate())
+    </insert>
+
+    <select id="selectById" resultMap="CrmCustomerFundAdjustResult">
+        select id, adjust_no, customer_id, amount, direction, reason, creator, create_time
+        from crm_customer_fund_adjust
+        where id = #{id}
+    </select>
+</mapper>

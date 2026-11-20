@@ -4,7 +4,6 @@ import java.util.List;
 
 import com.ruoyi.crm.dto.CrmBusinessDetailVo;
 import com.ruoyi.crm.dto.CrmBusinessDto;
-import com.ruoyi.crm.dto.CrmBusinessSettleVo;
 import com.ruoyi.crm.dto.CrmBusinessStatusVo;
 import com.ruoyi.crm.dto.CrmBusinessVo;
 
@@ -47,14 +46,6 @@ public interface ICrmBusinessService
      * @return 结果
      */
     public int changeBusStatus(CrmBusinessStatusVo statusVo);
-
-    /**
-     * 回填结算状态
-     *
-     * @param settleVo 结算请求
-     * @return 结果
-     */
-    public int updateSettleStatus(CrmBusinessSettleVo settleVo);
 
     /**
      * 商机转合同：成交商机复制意向清单生成草稿合同

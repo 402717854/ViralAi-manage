@@ -88,6 +88,25 @@ public class CrmContractBillDto extends BaseEntity
     @Excel(name = "账单状态", readConverterExp = "0=待生成,1=待复核,2=已确认,3=已结算,4=差异挂起")
     private Integer billStatus;
 
+    /** 结算方式：0未结算 1资金扣减 2线下收款 */
+    @Excel(name = "结算方式", readConverterExp = "0=未结算,1=资金扣减,2=线下收款")
+    private Integer settleType;
+
+    /** 实结金额 */
+    @Excel(name = "实结金额", scale = 8)
+    private BigDecimal settledAmount;
+
+    /** 关联资金流水ID */
+    private Long fundFlowId;
+
+    /** 关联资金流水号（列表不回填，详情按需查询） */
+    private String fundFlowNo;
+
+    /** 结算时间 */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @Excel(name = "结算时间", width = 22)
+    private Date settleTime;
+
     /** 是否需要关注差异（存在待处理差异时回显） */
     private Integer pendingDiffCount;
 

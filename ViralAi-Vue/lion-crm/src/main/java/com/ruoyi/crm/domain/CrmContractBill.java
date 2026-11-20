@@ -73,6 +73,19 @@ public class CrmContractBill extends BaseEntity
     /** 账单状态，见 ContractBillStatusEnum */
     private Integer billStatus;
 
+    /** 结算方式：0未结算 1资金扣减 2线下收款 */
+    private Integer settleType;
+
+    /** 实结金额（资金扣减为实扣、线下收款为实收） */
+    private BigDecimal settledAmount;
+
+    /** 关联资金流水ID */
+    private Long fundFlowId;
+
+    /** 结算时间 */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date settleTime;
+
     /** 复核人 */
     private Long auditor;
 

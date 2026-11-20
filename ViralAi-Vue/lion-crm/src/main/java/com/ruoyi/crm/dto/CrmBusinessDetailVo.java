@@ -41,7 +41,4 @@ public class CrmBusinessDetailVo extends CrmBusinessDto
 
     /** 是否允许转合同 */
     private Boolean convertible;
-
-    /** 是否允许回填结算状态 */
-    private Boolean settleEditable;
 }

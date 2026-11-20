@@ -84,6 +84,13 @@
     <el-table v-loading="loading" :data="customerList" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="50" align="center" fixed="left" />
       <el-table-column label="客户名称" align="center" prop="name" width="180" fixed="left" :show-overflow-tooltip="true" />
+      <el-table-column label="账户余额" align="right" width="130">
+        <template #default="scope">
+          <span :class="{ 'balance-zero': !Number(scope.row.accountBalance || 0) }">
+            {{ formatBalance(scope.row.accountBalance) }}
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column label="负责人" align="center" prop="ownerUser" width="100" fixed="left" />
       <el-table-column label="客户状态" align="center" prop="status" width="100" fixed="left">
         <template #default="scope">
@@ -356,6 +363,18 @@ function handleExport() {
   }, `customer_${new Date().getTime()}.xlsx`)
 }
 
+/** 账户余额展示：千分位 2 位小数；无账户按 0 显示 */
+function formatBalance(value) {
+  const num = Number(value || 0)
+  return num.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 getList()
 </script>
+
+<style scoped>
+.balance-zero {
+  color: var(--el-text-color-placeholder);
+}
+</style>
 

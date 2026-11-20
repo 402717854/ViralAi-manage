@@ -53,11 +53,29 @@ export function auditBill(data) {
   })
 }
 
-// 账单结算
-export function settleBill(id) {
+// 账单结算（data 可选：settleType 1资金扣减 2线下收款、settledAmount、remark）
+export function settleBill(id, data) {
   return request({
     url: '/crm/bill/settle/' + id,
-    method: 'post'
+    method: 'post',
+    data: data
+  })
+}
+
+// 结算预览（应付金额 + 客户可用余额）
+export function getSettlePreview(id) {
+  return request({
+    url: '/crm/bill/settle/preview/' + id,
+    method: 'get'
+  })
+}
+
+// 结算撤销（红冲资金流水、余额退回）
+export function cancelBillSettle(id, remark) {
+  return request({
+    url: '/crm/bill/settle/cancel/' + id,
+    method: 'post',
+    params: { remark }
   })
 }
 

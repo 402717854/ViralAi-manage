@@ -478,7 +478,7 @@ insert into sys_menu (menu_id, menu_name, parent_id, order_num, path, component,
                       is_frame, is_cache, menu_type, visible, status, perms, icon, create_by, create_time,
                       update_by, update_time, remark)
 select (select ifnull(max(menu_id), 0) + 1 from sys_menu), '账单结算', @bill_menu, 3, '', '', '', '',
-       1, 0, 'F', '0', '0', 'crm:bill:settle', '#', 'admin', sysdate(), '', null, '结算并回写商机结算状态'
+       1, 0, 'F', '0', '0', 'crm:bill:settle', '#', 'admin', sysdate(), '', null, '账单结算（资金扣减 / 线下收款）'
 from dual where @bill_menu is not null
   and not exists (select 1 from sys_menu where perms = 'crm:bill:settle');
 

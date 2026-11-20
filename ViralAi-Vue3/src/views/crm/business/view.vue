@@ -32,13 +32,6 @@
             @click="handleConvert"
             v-hasPermi="['crm:business:convert']"
           >转合同</el-button>
-          <el-button
-            v-if="detail.settleEditable"
-            type="warning"
-            icon="Money"
-            @click="handleSettle"
-            v-hasPermi="['crm:business:settle']"
-          >{{ Number(detail.settleStatus) === 1 ? "标记未结算" : "标记已结算" }}</el-button>
           <el-button icon="Back" @click="handleBack">返回</el-button>
         </div>
       </template>
@@ -55,13 +48,9 @@
           <el-descriptions-item label="成交时间">{{ detail.dealTime ? parseTime(detail.dealTime) : "-" }}</el-descriptions-item>
           <el-descriptions-item label="意向合同金额">{{ formatAmount(detail.contactAmount) }}</el-descriptions-item>
           <el-descriptions-item label="授信金额">{{ formatAmount(detail.creditAmount) }}</el-descriptions-item>
-          <el-descriptions-item label="合同状态">
+          <el-descriptions-item label="合同状态" :span="2">
             <el-tag v-if="Number(detail.contactStatus) === 1" type="success" size="small">已签</el-tag>
             <el-tag v-else type="info" size="small" effect="plain">未签</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="结算状态">
-            <el-tag v-if="Number(detail.settleStatus) === 1" type="success" size="small">已结算</el-tag>
-            <el-tag v-else type="info" size="small" effect="plain">未结算</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="中断备注" :span="2">
             <span :class="{ 'text-placeholder': !detail.failRemark }">{{ detail.failRemark || "无" }}</span>
@@ -190,7 +179,7 @@
 </template>
 
 <script setup name="BusinessDetail">
-import { getBusiness, changeBusinessStatus, convertContract, updateSettleStatus } from "@/api/crm/business"
+import { getBusiness, changeBusinessStatus, convertContract } from "@/api/crm/business"
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
@@ -387,19 +376,6 @@ function handleConvert() {
     } else {
       getDetail()
     }
-  }).catch(() => {})
-}
-
-function handleSettle() {
-  const target = Number(detail.settleStatus) === 1 ? 0 : 1
-  const tip = target === 1
-    ? `是否确认将商机「${detail.name}」标记为已结算？`
-    : `是否确认将商机「${detail.name}」标记为未结算？`
-  proxy.$modal.confirm(tip).then(() => {
-    return updateSettleStatus({ id: detail.id, settleStatus: target })
-  }).then(() => {
-    proxy.$modal.msgSuccess("结算状态已更新")
-    getDetail()
   }).catch(() => {})
 }
 

@@ -35,15 +35,6 @@ export function changeBusinessStatus(data) {
   })
 }
 
-// 回填结算状态（仅成交商机）
-export function updateSettleStatus(data) {
-  return request({
-    url: '/crm/business/update-settle',
-    method: 'post',
-    data: data
-  })
-}
-
 // 成交商机一键转合同，返回新建合同ID
 export function convertContract(busId) {
   return request({

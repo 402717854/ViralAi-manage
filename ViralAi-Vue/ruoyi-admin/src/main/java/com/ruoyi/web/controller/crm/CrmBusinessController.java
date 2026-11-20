@@ -21,7 +21,6 @@ import com.ruoyi.common.core.page.TableDataInfo;
 import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.crm.dto.CrmBusinessDto;
-import com.ruoyi.crm.dto.CrmBusinessSettleVo;
 import com.ruoyi.crm.dto.CrmBusinessStatusVo;
 import com.ruoyi.crm.dto.CrmBusinessVo;
 import com.ruoyi.crm.service.ICrmBusinessService;
@@ -31,11 +30,10 @@ import com.ruoyi.crm.service.ICrmBusinessService;
  *
  * <p>接口清单：</p>
  * <pre>
- * GET    /crm/business/list              分页列表（名称/客户/渠道/负责人/状态/成交时间/合同状态/结算状态）
+ * GET    /crm/business/list              分页列表（名称/客户/渠道/负责人/状态/成交时间/合同状态）
  * GET    /crm/business/{id}              详情（主信息 + 意向产品 + 关联合同 + 操作日志 + 可执行动作）
  * POST   /crm/business/save              新建 / 编辑（仅初始化、跟进中）
  * POST   /crm/business/update-status     状态流转（严格按状态机白名单）
- * POST   /crm/business/update-settle     结算状态回填（仅成交）
  * POST   /crm/business/convert-contract  成交商机一键转合同，返回合同ID
  * POST   /crm/business/export            导出
  * DELETE /crm/business/{ids}             删除（仅初始化、跟进中）
@@ -114,17 +112,6 @@ public class CrmBusinessController extends BaseController
     public AjaxResult updateStatus(@Valid @RequestBody CrmBusinessStatusVo statusVo)
     {
         return toAjax(crmBusinessService.changeBusStatus(statusVo));
-    }
-
-    /**
-     * 回填结算状态（运营 / 管理人员）
-     */
-    @PreAuthorize("@ss.hasPermi('crm:business:settle')")
-    @Log(title = "CRM 商机结算回填", businessType = BusinessType.UPDATE)
-    @PostMapping("/update-settle")
-    public AjaxResult updateSettle(@Valid @RequestBody CrmBusinessSettleVo settleVo)
-    {
-        return toAjax(crmBusinessService.updateSettleStatus(settleVo));
     }
 
     /**

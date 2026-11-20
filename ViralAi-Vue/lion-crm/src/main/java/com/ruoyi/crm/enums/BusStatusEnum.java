@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
  * 1 跟进中   → 2 提交测试、5 暂停、6 中断
  * 2 提交测试 → 3 测试中、1 退回跟进、6 中断
  * 3 测试中   → 4 成交、1 退回跟进、5 暂停、6 中断
- * 4 成交     → 终态，不可再流转（仅可转合同、回填结算）
+ * 4 成交     → 终态，不可再流转（仅可转合同）
  * 5 暂停     → 1 恢复跟进、6 中断
  * 6 中断     → 终态，不可恢复
  * </pre>
@@ -210,16 +210,6 @@ public enum BusStatusEnum
      * @return 成交状态返回 true
      */
     public boolean isConvertible()
-    {
-        return this == DEAL;
-    }
-
-    /**
-     * 是否允许回填结算状态
-     *
-     * @return 成交后允许回填
-     */
-    public boolean isSettleEditable()
     {
         return this == DEAL;
     }

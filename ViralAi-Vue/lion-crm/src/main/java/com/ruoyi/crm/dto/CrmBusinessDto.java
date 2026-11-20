@@ -66,10 +66,6 @@ public class CrmBusinessDto extends BaseEntity
     @Excel(name = "合同状态", readConverterExp = "0=未签,1=已签")
     private Integer contactStatus;
 
-    /** 结算状态：0未结算 1已结算 */
-    @Excel(name = "结算状态", readConverterExp = "0=未结算,1=已结算")
-    private Integer settleStatus;
-
     /** 意向合同金额 */
     @Excel(name = "意向金额")
     private BigDecimal contactAmount;

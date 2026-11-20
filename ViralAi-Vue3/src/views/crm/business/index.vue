@@ -67,12 +67,6 @@
           <el-option label="已签" :value="1" />
         </el-select>
       </el-form-item>
-      <el-form-item label="结算状态" prop="settleStatus">
-        <el-select v-model="queryParams.settleStatus" placeholder="请选择" clearable style="width: 120px">
-          <el-option label="未结算" :value="0" />
-          <el-option label="已结算" :value="1" />
-        </el-select>
-      </el-form-item>
       <el-form-item label="成交时间">
         <el-date-picker
           v-model="dealTimeRange"
@@ -138,12 +132,6 @@
           <el-tag v-else type="info" size="small" effect="plain">未签</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="是否结算" width="100" align="center">
-        <template #default="scope">
-          <el-tag v-if="Number(scope.row.settleStatus) === 1" type="success" size="small">已结算</el-tag>
-          <el-tag v-else type="info" size="small" effect="plain">未结算</el-tag>
-        </template>
-      </el-table-column>
       <el-table-column label="操作" width="300" align="center" fixed="right" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="handleView(scope.row)" v-hasPermi="['crm:business:query']">详情</el-button>
@@ -180,14 +168,6 @@
             @click="handleViewContract(scope.row)"
             v-hasPermi="['crm:business:query']"
           >查看合同</el-button>
-          <el-button
-            v-if="canSettle(scope.row)"
-            link
-            type="warning"
-            icon="Money"
-            @click="handleSettle(scope.row)"
-            v-hasPermi="['crm:business:settle']"
-          >{{ Number(scope.row.settleStatus) === 1 ? "标记未结算" : "标记已结算" }}</el-button>
           <el-button
             v-if="canDelete(scope.row)"
             link
@@ -236,7 +216,7 @@
 </template>
 
 <script setup name="Business">
-import { listBusiness, delBusiness, changeBusinessStatus, convertContract, updateSettleStatus } from "@/api/crm/business"
+import { listBusiness, delBusiness, changeBusinessStatus, convertContract } from "@/api/crm/business"
 import { getCustomerOptions } from "@/api/crm/customer"
 import { getSupplierOptions } from "@/api/crm/supplier"
 
@@ -310,8 +290,7 @@ const queryParams = ref({
   supplierId: undefined,
   ownerUser: undefined,
   statusList: [],
-  contactStatus: undefined,
-  settleStatus: undefined
+  contactStatus: undefined
 })
 
 /** 当前列表路由，编辑/详情页据此推导，避免菜单父级路径差异导致跳转失效 */
@@ -348,10 +327,6 @@ function canConvert(row) {
 
 function canViewContract(row) {
   return row.contractId != null && row.contractId !== ""
-}
-
-function canSettle(row) {
-  return Number(row.busStatus) === STATUS.DEAL
 }
 
 /** 金额展示：空值显示 -，数字千分位两位小数 */
@@ -423,8 +398,7 @@ function resetQuery() {
     supplierId: undefined,
     ownerUser: undefined,
     statusList: [],
-    contactStatus: undefined,
-    settleStatus: undefined
+    contactStatus: undefined
   }
   proxy.resetForm("queryRef")
   handleQuery()
@@ -510,20 +484,6 @@ function handleConvert(row) {
 
 function handleViewContract(row) {
   proxy.$router.push({ path: contractBasePath.value + "/detail", query: { id: row.contractId } })
-}
-
-/** 结算回填：在「已结算 / 未结算」之间切换 */
-function handleSettle(row) {
-  const target = Number(row.settleStatus) === 1 ? 0 : 1
-  const tip = target === 1
-    ? `是否确认将商机「${row.name}」标记为已结算？`
-    : `是否确认将商机「${row.name}」标记为未结算？`
-  proxy.$modal.confirm(tip).then(() => {
-    return updateSettleStatus({ id: row.id, settleStatus: target })
-  }).then(() => {
-    proxy.$modal.msgSuccess("结算状态已更新")
-    getList()
-  }).catch(() => {})
 }
 
 function handleDelete(row) {

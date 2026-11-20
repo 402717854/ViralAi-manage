@@ -22,7 +22,6 @@ import com.ruoyi.crm.dto.CrmBusinessContractVo;
 import com.ruoyi.crm.dto.CrmBusinessDetailVo;
 import com.ruoyi.crm.dto.CrmBusinessDto;
 import com.ruoyi.crm.dto.CrmBusinessProductDto;
-import com.ruoyi.crm.dto.CrmBusinessSettleVo;
 import com.ruoyi.crm.dto.CrmBusinessStatusVo;
 import com.ruoyi.crm.dto.CrmBusinessVo;
 import com.ruoyi.crm.dto.CrmContractProductDto;
@@ -119,7 +118,6 @@ public class CrmBusinessServiceImpl implements ICrmBusinessService
             detail.setProductEditable(Boolean.FALSE);
             detail.setDeletable(Boolean.FALSE);
             detail.setConvertible(Boolean.FALSE);
-            detail.setSettleEditable(Boolean.FALSE);
         }
         else
         {
@@ -132,7 +130,6 @@ public class CrmBusinessServiceImpl implements ICrmBusinessService
             // 已生成合同的商机不再允许重复转合同（默认一商机一合同）
             boolean converted = detail.getHasContract() != null && detail.getHasContract() == 1;
             detail.setConvertible(status.isConvertible() && !converted);
-            detail.setSettleEditable(status.isSettleEditable());
         }
         return detail;
     }
@@ -186,7 +183,6 @@ public class CrmBusinessServiceImpl implements ICrmBusinessService
         entity.setOwnerUser(resolveOwnerUser(vo.getOwnerUser()));
         entity.setBusStatus(BusStatusEnum.INIT.getCode());
         entity.setContactStatus(0);
-        entity.setSettleStatus(0);
         entity.setContactAmount(normalizeAmount(vo.getContactAmount(), "意向合同金额"));
         entity.setCreditAmount(normalizeAmount(vo.getCreditAmount(), "授信金额"));
         entity.setRemark(vo.getRemark());
@@ -332,43 +328,6 @@ public class CrmBusinessServiceImpl implements ICrmBusinessService
         }
         crmBusinessLogRecorder.record(statusVo.getId(), BusinessActionEnum.STATUS,
                 currentStatus.getCode().intValue(), targetStatus.getCode().intValue(), content);
-        return rows;
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int updateSettleStatus(CrmBusinessSettleVo settleVo)
-    {
-        if (settleVo == null || settleVo.getId() == null)
-        {
-            throw new ServiceException("商机ID不能为空");
-        }
-        CrmBusiness current = requireBusiness(settleVo.getId());
-        crmBusinessDataScope.assertViewable(current);
-
-        BusStatusEnum status = BusStatusEnum.of(current.getBusStatus());
-        if (status == null || !status.isSettleEditable())
-        {
-            throw new ServiceException("仅成交状态的商机可以回填结算状态");
-        }
-        Integer settleStatus = settleVo.getSettleStatus();
-        if (settleStatus == null || (settleStatus != 0 && settleStatus != 1))
-        {
-            throw new ServiceException("结算状态只能为 0 未结算 或 1 已结算");
-        }
-        if (settleStatus.equals(current.getSettleStatus()))
-        {
-            throw new ServiceException("结算状态未发生变化");
-        }
-
-        int rows = crmBusinessMapper.updateSettleStatus(settleVo.getId(), settleStatus, SecurityUtils.getUserId());
-        if (rows == 0)
-        {
-            throw new ServiceException("商机不存在或已删除");
-        }
-        crmBusinessLogRecorder.record(settleVo.getId(), BusinessActionEnum.SETTLE,
-                status.getCode().intValue(), status.getCode().intValue(),
-                StringUtils.format("回填结算状态为【{}】", settleStatus == 1 ? "已结算" : "未结算"));
         return rows;
     }
 

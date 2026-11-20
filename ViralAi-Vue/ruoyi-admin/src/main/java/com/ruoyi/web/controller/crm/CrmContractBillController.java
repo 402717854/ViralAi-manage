@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.ruoyi.common.annotation.Log;
@@ -23,6 +24,7 @@ import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.crm.dto.CrmBillAuditVo;
 import com.ruoyi.crm.dto.CrmBillDiffHandleVo;
 import com.ruoyi.crm.dto.CrmBillGenerateVo;
+import com.ruoyi.crm.dto.CrmBillSettleVo;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
 import com.ruoyi.crm.dto.CrmContractBillDto;
 import com.ruoyi.crm.dto.CrmContractBillSubDto;
@@ -39,7 +41,8 @@ import com.ruoyi.crm.service.ICrmContractBillService;
  * GET    /crm/bill/{id}/usages   账单归属用量明细分页
  * POST   /crm/bill/generate      生成账单（渠道 + 账期）
  * POST   /crm/bill/audit         复核（确认 / 差异挂起）
- * POST   /crm/bill/settle/{id}   结算并回写商机结算状态
+ * POST   /crm/bill/settle/{id}   结算（资金扣减 / 线下收款）
+ * POST   /crm/bill/settle/cancel/{id} 结算撤销（红冲资金流水）
  * POST   /crm/bill/export        导出账单汇总
  * GET    /crm/bill/diff/list     差异清单
  * POST   /crm/bill/diff/handle   差异处理（调账 / 豁免 / 驳回）
@@ -138,14 +141,41 @@ public class CrmContractBillController extends BaseController
 
     /**
      * 账单结算
+     *
+     * <p>请求体可选：不传时按「资金扣减 + 应付全额」处理，兼容未升级的前端。</p>
      */
     @PreAuthorize("@ss.hasPermi('crm:bill:settle')")
     @RepeatSubmit
     @Log(title = "对账账单", businessType = BusinessType.UPDATE)
     @PostMapping("/settle/{id}")
-    public AjaxResult settle(@PathVariable("id") Long id)
+    public AjaxResult settle(@PathVariable("id") Long id,
+                             @RequestBody(required = false) CrmBillSettleVo vo)
     {
-        return toAjax(crmContractBillService.settle(id));
+        return success(crmContractBillService.settle(id, vo));
+    }
+
+    /**
+     * 结算预览：应付金额 + 客户可用余额
+     */
+    @PreAuthorize("@ss.hasPermi('crm:bill:settle')")
+    @GetMapping("/settle/preview/{id}")
+    public AjaxResult settlePreview(@PathVariable("id") Long id)
+    {
+        return success(crmContractBillService.previewSettle(id));
+    }
+
+    /**
+     * 结算撤销（红冲资金流水并回退余额）
+     */
+    @PreAuthorize("@ss.hasPermi('crm:bill:settle-cancel')")
+    @RepeatSubmit
+    @Log(title = "对账账单", businessType = BusinessType.UPDATE)
+    @PostMapping("/settle/cancel/{id}")
+    public AjaxResult cancelSettle(@PathVariable("id") Long id,
+                                   @RequestParam(value = "remark", required = false) String remark)
+    {
+        crmContractBillService.cancelSettle(id, remark);
+        return success();
     }
 
     /**

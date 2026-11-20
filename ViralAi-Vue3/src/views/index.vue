@@ -34,28 +34,11 @@
       </el-col>
     </el-row>
 
-    <!-- 趋势：横向需要宽度承载 6 个刻度，独占一行；无数据时用空态覆盖而不是渲染一排 0 -->
-    <el-card v-if="canStat" shadow="never" class="panel trend-card">
-      <template #header>
-        <div class="card-head">
-          <span>近 {{ TREND_MONTHS }} 期走势</span>
-          <span class="head-hint">应收 / 成本 / 毛利，截止 {{ billCycle }}</span>
-        </div>
-      </template>
-      <div class="trend-wrap">
-        <div ref="trendRef" class="trend-chart" :class="{ 'is-hidden': !trendHasData }"></div>
-        <el-empty
-          v-if="!trendHasData"
-          class="trend-empty"
-          :image-size="56"
-          description="近 6 期暂无用量数据"
-        />
-      </div>
-    </el-card>
-
+    <!-- 三分区布局：左列榜单（成本 / 余额），右列动作（快捷入口 / 待办），趋势独占底部整行 -->
     <el-row :gutter="12" class="content-row">
       <el-col :xs="24" :lg="15">
-        <el-card shadow="never" class="panel">
+        <div class="col-stack">
+          <el-card shadow="never" class="panel">
           <template #header>
             <div class="card-head">
               <span>客户 × 渠道 成本 TOP5</span>
@@ -86,11 +69,48 @@
             </div>
           </div>
           <el-empty v-else :image-size="56" description="本账期暂无成本数据" />
-        </el-card>
+          </el-card>
+
+          <!-- 客户充值余额 TOP10：余额为 0 的客户不参与排名，避免榜单被长尾零值淹没 -->
+          <el-card v-if="canFund" shadow="never" class="panel">
+          <template #header>
+            <div class="card-head">
+              <span>客户充值余额 TOP10</span>
+              <div class="head-right">
+                <span class="head-hint" v-if="balanceTopTotal">共 {{ balanceTopTotal }} 个客户有余额</span>
+                <el-link type="primary" :underline="false" @click="go('fund')">资金管理 ›</el-link>
+              </div>
+            </div>
+          </template>
+          <div v-if="balanceTop.length" class="rank-list">
+            <div class="rank-row" v-for="(item, idx) in balanceTop" :key="item.customerId">
+              <span class="rank-idx">{{ idx + 1 }}</span>
+              <span class="rank-name" :title="item.customerName || '未命名客户'">
+                {{ item.customerName || "未命名客户" }}
+              </span>
+              <span class="rank-channel" :title="item.ownerName || ''">{{ item.ownerName || "-" }}</span>
+              <span class="rank-bar"><span class="rank-bar-inner" :style="{ width: balanceBarWidth(item) }"></span></span>
+              <span class="rank-amount" :title="fullAmount(item.balance)">{{ shortAmount(item.balance) }}</span>
+            </div>
+          </div>
+          <el-empty v-else :image-size="56" description="暂无客户充值余额" />
+          </el-card>
+        </div>
       </el-col>
 
       <el-col :xs="24" :lg="9">
-        <el-card shadow="never" class="panel">
+        <div class="col-stack">
+          <!-- 快捷入口：与「待我处理」同列，位于右列顶部 -->
+          <el-card shadow="never" class="panel">
+            <template #header>
+              <div class="card-head"><span>快捷入口</span></div>
+            </template>
+            <div class="quick-list">
+              <el-button v-for="q in quickLinks" :key="q.label" @click="go(q.target)">{{ q.label }}</el-button>
+            </div>
+          </el-card>
+
+          <el-card shadow="never" class="panel">
           <template #header>
             <div class="card-head">
               <span>待我处理</span>
@@ -109,16 +129,27 @@
             <p class="todo-tip">数字可点击，进入已按状态筛选的列表</p>
           </template>
           <el-empty v-else :image-size="56" description="当前角色暂无待办项" />
-        </el-card>
+          </el-card>
+        </div>
       </el-col>
     </el-row>
 
-    <el-card shadow="never" class="panel quick-card">
+    <!-- 趋势：横向需要宽度承载 6 个刻度，独占一行；无数据时用空态覆盖而不是渲染一排 0 -->
+    <el-card v-if="canStat" shadow="never" class="panel trend-card">
       <template #header>
-        <div class="card-head"><span>快捷入口</span></div>
+        <div class="card-head">
+          <span>近 {{ TREND_MONTHS }} 期走势</span>
+          <span class="head-hint">应收 / 成本 / 毛利，截止 {{ billCycle }}</span>
+        </div>
       </template>
-      <div class="quick-list">
-        <el-button v-for="q in quickLinks" :key="q.label" @click="go(q.target)">{{ q.label }}</el-button>
+      <div class="trend-wrap">
+        <div ref="trendRef" class="trend-chart" :class="{ 'is-hidden': !trendHasData }"></div>
+        <el-empty
+          v-if="!trendHasData"
+          class="trend-empty"
+          :image-size="56"
+          description="近 6 期暂无用量数据"
+        />
       </div>
     </el-card>
   </div>
@@ -127,6 +158,7 @@
 <script setup name="Index">
 import { getUsageBoard, getUsageTrend } from "@/api/crm/usage"
 import { listBill, listBillDiff } from "@/api/crm/bill"
+import { listFundAccount, listFundRecharge } from "@/api/crm/fund"
 import { listContract } from "@/api/crm/contract"
 import { checkPermi } from "@/utils/permission"
 import { parseTime } from "@/utils/ruoyi"
@@ -159,12 +191,16 @@ const billCycle = ref(parseTime(new Date(), "{y}-{m}"))
 const board = ref({})
 const trend = ref([])
 const trendRef = ref(null)
+/** 客户充值余额榜（后端已按余额倒序 + 过滤零余额，前端不再排序） */
+const balanceTop = ref([])
+const balanceTopTotal = ref(0)
 /** 待办计数按规则 key 存放，规则被角色裁掉时对应数据不会请求 */
 const todoCounts = reactive({})
 
 /** 权限判断复用项目已有工具（管理员 *:*:* 直接通过）；无权限的模块不发起请求 */
 const canStat = computed(() => checkPermi(["crm:usage:stat"]))
 const canBill = computed(() => checkPermi(["crm:bill:list"]))
+const canFund = computed(() => checkPermi(["crm:fund:list"]))
 
 /**
  * 待办裁剪规则
@@ -206,6 +242,16 @@ const TODO_RULES = [
     viewPermi: "crm:contract:list",
     actionPermi: "crm:contract:audit",
     roles: ["admin", "business", "sales"]
+  },
+  {
+    key: "fund",
+    label: "待审核充值",
+    shortLabel: "充值",
+    unit: "笔",
+    target: "fundPending",
+    viewPermi: "crm:fund:list",
+    actionPermi: "crm:fund:recharge-audit",
+    roles: ["admin", "finance", "caiwu"]
   }
 ]
 
@@ -327,12 +373,30 @@ function shareRate(item) {
   return ((Number(item.totalCostAmount) / total) * 100).toFixed(2) + "%"
 }
 
-const quickLinks = computed(() => [
-  { label: "对账看板", target: "reconcile" },
-  { label: "用量明细", target: "usage" },
-  { label: "对账账单", target: "bill" },
-  { label: "差异处理", target: "diff" }
-])
+/** 余额条形以榜首为满格；数值差距大时也能看出梯队，最小留 2% 保证可见 */
+const balanceTopMax = computed(() =>
+  balanceTop.value.length ? Number(balanceTop.value[0].balance || 0) : 0
+)
+
+function balanceBarWidth(item) {
+  if (!balanceTopMax.value) {
+    return "0%"
+  }
+  const percent = (Number(item.balance || 0) / balanceTopMax.value) * 100
+  return Math.max(percent, 2).toFixed(1) + "%"
+}
+
+const quickLinks = computed(() => {
+  const links = [
+    { label: "对账看板", target: "reconcile" },
+    { label: "用量明细", target: "usage" },
+    { label: "对账账单", target: "bill" },
+    { label: "客户资金", target: "fund" },
+    { label: "差异处理", target: "diff" }
+  ]
+  // 无资金权限的角色不展示该入口，避免点进去 403
+  return links.filter(item => item.target !== "fund" || canFund.value)
+})
 
 /**
  * 菜单路径随部署配置可能变化，按路径后缀在已注册路由中反查；
@@ -345,6 +409,8 @@ const ROUTE_MAP = {
   billPending: { suffix: "/finance/bill", fallback: "/crm/finance/bill", query: { billStatus: 1 } },
   diff: { suffix: "/finance/diff", fallback: "/crm/finance/diff" },
   diffPending: { suffix: "/finance/diff", fallback: "/crm/finance/diff", query: { handleStatus: 0 } },
+  fund: { suffix: "/finance/fund", fallback: "/crm/finance/fund" },
+  fundPending: { suffix: "/finance/fund", fallback: "/crm/finance/fund", query: { tab: "recharge" } },
   contractPending: { suffix: "/contract", fallback: "/crm/contract", query: { statusList: 1 } }
 }
 
@@ -368,7 +434,8 @@ function go(target) {
 const TODO_LOADERS = {
   bill: () => listBill({ pageNum: 1, pageSize: 1, params: { statusList: "1" } }),
   diff: () => listBillDiff({ pageNum: 1, pageSize: 1, handleStatus: 0 }),
-  contract: () => listContract({ pageNum: 1, pageSize: 1, params: { statusList: "1" } })
+  contract: () => listContract({ pageNum: 1, pageSize: 1, params: { statusList: "1" } }),
+  fund: () => listFundRecharge({ pageNum: 1, pageSize: 1, status: 0 })
 }
 
 /** 只请求当前角色可见的待办，被裁掉的类别不发请求（避免无谓的 403 与流量） */
@@ -392,6 +459,15 @@ function loadAll() {
       }),
       getUsageTrend(billCycle.value, TREND_MONTHS).then(res => {
         trend.value = res.data || []
+      })
+    )
+  }
+  /** 余额是实时值，与账期无关；零余额客户由后端 hasBalance=1 过滤，取前 10 条即榜单 */
+  if (canFund.value) {
+    tasks.push(
+      listFundAccount({ pageNum: 1, pageSize: 10, hasBalance: 1 }).then(res => {
+        balanceTop.value = res.rows || []
+        balanceTopTotal.value = res.total || 0
       })
     )
   }
@@ -614,7 +690,7 @@ loadAll()
 }
 
 .trend-card {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 /* 固定高度给 echarts 容器，避免首次渲染时容器为 0 高导致空白 */
@@ -643,8 +719,16 @@ loadAll()
   padding: 0;
 }
 
-.panel {
+/* 列内多卡片纵向堆叠：最后一张撑满剩余高度，避免左右两列底部参差 */
+.col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   height: 100%;
+
+  > .panel:last-child {
+    flex: 1;
+  }
 }
 
 .card-head {
@@ -659,6 +743,12 @@ loadAll()
   font-size: 12px;
   font-weight: 400;
   color: var(--el-text-color-secondary);
+}
+
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .rank-list {
@@ -784,10 +874,6 @@ loadAll()
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--el-text-color-placeholder);
-}
-
-.quick-card {
-  margin-bottom: 0;
 }
 
 .quick-list {

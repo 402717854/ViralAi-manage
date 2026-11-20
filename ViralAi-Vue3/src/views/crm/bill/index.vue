@@ -129,6 +129,18 @@
           <dict-tag :options="crm_bill_status" :value="String(scope.row.billStatus)" />
         </template>
       </el-table-column>
+      <el-table-column label="结算方式" align="center" width="110">
+        <template #default="scope">
+          <el-tag v-if="Number(scope.row.settleType) === 1" type="success">资金扣减</el-tag>
+          <el-tag v-else-if="Number(scope.row.settleType) === 2" type="info">线下收款</el-tag>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="实结金额" align="center" width="150" show-overflow-tooltip>
+        <template #default="scope">
+          <span>{{ scope.row.settledAmount === null || scope.row.settledAmount === undefined ? "-" : formatAmount(scope.row.settledAmount) }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="待处理差异" align="center" width="110">
         <template #default="scope">
           <el-tag v-if="scope.row.pendingDiffCount > 0" type="danger"> {{ scope.row.pendingDiffCount }} 条 </el-tag>
@@ -141,7 +153,7 @@
           <span>{{ parseTime(scope.row.auditTime, '{y}-{m}-{d} {h}:{i}') || "-" }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="270" fixed="right">
+      <el-table-column label="操作" align="center" width="330" fixed="right">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="openDetail(scope.row)">详情</el-button>
           <el-button link type="primary" icon="Tickets" @click="openSubBills(scope.row)">子账单</el-button>
@@ -158,9 +170,17 @@
             link
             type="success"
             icon="Money"
-            @click="handleSettle(scope.row)"
+            @click="openSettle(scope.row)"
             v-hasPermi="['crm:bill:settle']"
           >结算</el-button>
+          <el-button
+            v-if="canCancelSettle(scope.row)"
+            link
+            type="danger"
+            icon="RefreshLeft"
+            @click="handleCancelSettle(scope.row)"
+            v-hasPermi="['crm:bill:settle-cancel']"
+          >撤销结算</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -246,6 +266,80 @@
       </template>
     </el-dialog>
 
+    <!-- 账单结算 -->
+    <el-dialog title="结算确认" v-model="settleOpen" width="560px" append-to-body>
+      <el-form :model="settleForm" ref="settleRef" label-width="100px">
+        <el-form-item label="账单编号">
+          <span class="plain-text">{{ settleForm.billNo }}</span>
+        </el-form-item>
+        <el-form-item label="客户">
+          <span class="plain-text">{{ settleForm.customerName }}</span>
+        </el-form-item>
+        <el-form-item label="应付金额">
+          <span class="amount-strong">{{ formatAmount(settleForm.billAmount) }}</span>
+        </el-form-item>
+        <el-form-item label="实结金额">
+          <el-input v-model="settleForm.settledAmount" placeholder="默认等于应付金额，可调整" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="结算方式">
+          <el-radio-group v-model="settleForm.settleType" @change="onSettleTypeChange">
+            <el-radio :value="1">资金扣减</el-radio>
+            <el-radio :value="2">线下收款</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <template v-if="settleForm.settleType === 1">
+          <el-form-item label="可用余额">
+            <span class="amount-strong" :class="{ 'text-danger': settleInsufficient }">
+              {{ formatAmount(settleForm.balance) }}
+            </span>
+          </el-form-item>
+          <el-form-item label="结算后余额">
+            <span :class="settleInsufficient ? 'text-danger' : 'text-success'">
+              {{ settleAfterBalance }}
+            </span>
+          </el-form-item>
+          <el-alert
+            v-if="settleInsufficient"
+            type="error"
+            :closable="false"
+            show-icon
+            :title="`可用余额不足，差额 ${settleDiff}`"
+            description="可切换为「线下收款」完成结算，或先到「客户资金」为该公司充值"
+          />
+        </template>
+        <template v-else>
+          <el-form-item label="收款方式">
+            <el-input v-model="settleForm.payType" placeholder="如：银行转账 / 现金" maxlength="64" />
+          </el-form-item>
+          <el-form-item label="凭证号">
+            <el-input v-model="settleForm.payVoucher" placeholder="线下收款凭证号 / 银行流水号" maxlength="128" />
+          </el-form-item>
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="线下收款只登记结算结果，不会扣减客户账户余额"
+          />
+        </template>
+
+        <el-form-item label="备注" style="margin-top: 8px">
+          <el-input v-model="settleForm.remark" type="textarea" :rows="2" maxlength="480" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button
+            type="primary"
+            :loading="settleSubmitting"
+            :disabled="settleForm.settleType === 1 && settleInsufficient"
+            @click="submitSettle"
+          >确认结算</el-button>
+          <el-button @click="settleOpen = false">取 消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 账单详情 -->
     <el-drawer v-model="detailOpen" title="账单详情" size="60%" append-to-body>
       <div v-if="detail.bill" v-loading="detailLoading">
@@ -269,7 +363,18 @@
           <el-descriptions-item label="生成时间">
             {{ parseTime(detail.bill.createTime, '{y}-{m}-{d} {h}:{i}') || "-" }}
           </el-descriptions-item>
-          <el-descriptions-item label="备注" :span="2">{{ detail.bill.remark || "-" }}</el-descriptions-item>
+          <el-descriptions-item label="结算方式">
+            <el-tag v-if="Number(detail.bill.settleType) === 1" type="success">资金扣减</el-tag>
+            <el-tag v-else-if="Number(detail.bill.settleType) === 2" type="info">线下收款</el-tag>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="实结金额">
+            {{ detail.bill.settledAmount === null || detail.bill.settledAmount === undefined ? "-" : formatAmount(detail.bill.settledAmount) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="结算时间">
+            {{ parseTime(detail.bill.settleTime, '{y}-{m}-{d} {h}:{i}') || "-" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="备注" :span="3">{{ detail.bill.remark || "-" }}</el-descriptions-item>
         </el-descriptions>
 
         <el-tabs v-model="detailTab" class="detail-tabs">
@@ -322,7 +427,16 @@
 </template>
 
 <script setup name="Bill">
-import { listBill, getBill, listBillUsages, generateBill, auditBill, settleBill } from "@/api/crm/bill"
+import {
+  listBill,
+  getBill,
+  listBillUsages,
+  generateBill,
+  auditBill,
+  settleBill,
+  cancelBillSettle,
+  getSettlePreview
+} from "@/api/crm/bill"
 import { getSupplierOptions } from "@/api/crm/supplier"
 import { getCustomerOptions } from "@/api/crm/customer"
 import { parseTime } from "@/utils/ruoyi"
@@ -387,6 +501,10 @@ function canAudit(row) {
 
 function canSettle(row) {
   return Number(row.billStatus) === BILL_STATUS.CONFIRMED
+}
+
+function canCancelSettle(row) {
+  return Number(row.billStatus) === BILL_STATUS.SETTLED
 }
 
 function buildQuery() {
@@ -540,13 +658,109 @@ function submitAudit() {
 }
 
 /** 结算 */
-function handleSettle(row) {
-  proxy.$modal.confirm(
-    `确认结算账单【${row.billNo}】？结算后账单状态置为已结算，并回写关联商机的结算状态。`
-  ).then(() => {
-    return settleBill(row.id)
+const settleOpen = ref(false)
+const settleSubmitting = ref(false)
+const settleRef = ref()
+const settleForm = ref({})
+
+/** 结算后余额 = 可用余额 - 实结金额（负数账单则是加回） */
+const settleAfterBalance = computed(() => {
+  const balance = Number(settleForm.value.balance || 0)
+  const amount = Number(settleForm.value.settledAmount || 0)
+  return formatAmount(balance - amount)
+})
+
+/** 余额是否不足：仅资金扣减且实结为正时需要判断 */
+const settleInsufficient = computed(() => {
+  if (Number(settleForm.value.settleType) !== 1) {
+    return false
+  }
+  const amount = Number(settleForm.value.settledAmount || 0)
+  if (amount <= 0) {
+    return false
+  }
+  return amount - Number(settleForm.value.balance || 0) > 0
+})
+
+const settleDiff = computed(() =>
+  formatAmount(Number(settleForm.value.settledAmount || 0) - Number(settleForm.value.balance || 0))
+)
+
+/** 打开结算弹窗：先取客户可用余额，做扣款预演 */
+function openSettle(row) {
+  settleForm.value = {
+    billId: row.id,
+    billNo: row.billNo,
+    customerName: row.customerName,
+    billAmount: row.totalSellAmount,
+    settledAmount: row.totalSellAmount,
+    settleType: 1,
+    balance: 0,
+    payType: undefined,
+    payVoucher: undefined,
+    remark: undefined
+  }
+  settleOpen.value = true
+  getSettlePreview(row.id).then(res => {
+    const preview = res.data || {}
+    if (preview.customerName) {
+      settleForm.value.customerName = preview.customerName
+    }
+    if (preview.billAmount !== undefined && preview.billAmount !== null) {
+      settleForm.value.billAmount = preview.billAmount
+      settleForm.value.settledAmount = preview.billAmount
+    }
+    settleForm.value.balance = preview.availableBalance === undefined || preview.availableBalance === null
+      ? 0
+      : preview.availableBalance
+  }).catch(() => {
+    // 预览失败不阻断结算流程，按 0 余额展示，由后端最终校验兜底
+  })
+}
+
+function onSettleTypeChange() {
+  // 线下收款不校验余额，这里只做提示刷新
+}
+
+function submitSettle() {
+  const amount = Number(settleForm.value.settledAmount)
+  if (settleForm.value.settledAmount === "" || Number.isNaN(amount)) {
+    proxy.$modal.msgWarning("请输入实结金额")
+    return
+  }
+  if (Number(settleForm.value.settleType) === 1 && amount > 0 && amount - Number(settleForm.value.balance) > 0) {
+    proxy.$modal.msgWarning("可用余额不足，请切换为线下收款或先充值")
+    return
+  }
+  settleSubmitting.value = true
+  settleBill(settleForm.value.billId, {
+    settleType: Number(settleForm.value.settleType),
+    settledAmount: settleForm.value.settledAmount,
+    payType: settleForm.value.payType,
+    payVoucher: settleForm.value.payVoucher,
+    remark: settleForm.value.remark
+  }).then(res => {
+    const result = res.data || {}
+    if (result.balanceAfter !== undefined && result.balanceAfter !== null) {
+      proxy.$modal.msgSuccess(`结算完成，扣款 ${formatAmount(result.deductAmount)}，账户余额 ${formatAmount(result.balanceAfter)}`)
+    } else {
+      proxy.$modal.msgSuccess("结算完成（线下收款，未扣减余额）")
+    }
+    settleOpen.value = false
+    getList()
+  }).finally(() => {
+    settleSubmitting.value = false
+  })
+}
+
+/** 结算撤销 */
+function handleCancelSettle(row) {
+  proxy.$modal.prompt(
+    `撤销账单【${row.billNo}】的结算？撤销后将红冲资金流水、余额退回客户账户。请在下方填写撤销原因。`
+  ).then(({ value }) => {
+    return cancelBillSettle(row.id, value)
   }).then(() => {
-    proxy.$modal.msgSuccess("结算完成")
+    proxy.$modal.msgSuccess("结算已撤销，余额已退回")
     getList()
   }).catch(() => {})
 }
@@ -639,6 +853,20 @@ getList()
 <style scoped>
 .plain-text {
   color: var(--el-text-color-regular);
+}
+
+.amount-strong {
+  font-weight: 600;
+}
+
+.text-danger {
+  color: var(--el-color-danger);
+  font-weight: 600;
+}
+
+.text-success {
+  color: var(--el-color-success);
+  font-weight: 600;
 }
 
 .detail-tabs {
