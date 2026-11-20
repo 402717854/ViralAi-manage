@@ -27,7 +27,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="updateTime"         column="update_time"          />
     </resultMap>
 
-    <sql id="selectBillJoinColumns">
+    <!-- 列表投影：只保留列表页用到的字段。
+         pending_diff_count 供列表「待处理差异」标签使用（前端按行读取）；
+         usage_count 已移除——列表与详情均未使用，原相关子查询是纯开销 -->
+    <sql id="selectBillListColumns">
         select a.id, a.bill_no, a.contract_id, ct.contact_no, ct.contract_name,
                a.customer_id, cu.name as customer_name,
                a.supplier_id, s.name as supplier_name,
@@ -35,7 +38,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                a.total_tokens, a.total_sell_amount, a.total_cost_amount, a.total_gross_profit,
                a.bill_status, a.remark, a.auditor, au.user_name as auditor_name, a.audit_time,
                a.creator, cr.user_name as creator_name, a.create_time, a.update_time,
-               (select count(1) from crm_contract_usage u where u.bill_id = a.id) as usage_count,
                (select count(1) from crm_contract_bill_diff d
                  where d.handle_status = 0 and d.supplier_id = a.supplier_id
                    and d.call_time &gt;= a.start_time and d.call_time &lt;= a.end_time) as pending_diff_count
@@ -47,9 +49,27 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join sys_user cr on a.creator = cr.user_id
     </sql>
 
+    <!-- 详情投影：单行查询，不再携带列表用的相关子查询。
+         用量条数由 countUsageByBillId 单独给出，用量明细走分页接口 -->
+    <sql id="selectBillDetailColumns">
+        select a.id, a.bill_no, a.contract_id, ct.contact_no, ct.contract_name,
+               a.customer_id, cu.name as customer_name,
+               a.supplier_id, s.name as supplier_name,
+               a.bill_cycle, a.start_time, a.end_time,
+               a.total_tokens, a.total_sell_amount, a.total_cost_amount, a.total_gross_profit,
+               a.bill_status, a.remark, a.auditor, au.user_name as auditor_name, a.audit_time,
+               a.creator, cr.user_name as creator_name, a.create_time, a.update_time
+        from crm_contract_bill a
+        left join crm_contract ct on a.contract_id = ct.id
+        left join crm_customer cu on a.customer_id = cu.id
+        left join crm_supplier s on a.supplier_id = s.id
+        left join sys_user au on a.auditor = au.user_id
+        left join sys_user cr on a.creator = cr.user_id
+    </sql>
+
     <select id="selectCrmContractBillList" parameterType="com.ruoyi.crm.dto.CrmContractBillDto"
             resultType="com.ruoyi.crm.dto.CrmContractBillDto">
-        <include refid="selectBillJoinColumns"/>
+        <include refid="selectBillListColumns"/>
         <where>
             <if test="billNo != null and billNo != ''"> and a.bill_no like concat('%', #{billNo}, '%')</if>
             <if test="contractId != null"> and a.contract_id = #{contractId}</if>
@@ -78,7 +98,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </select>
 
     <select id="selectCrmContractBillDetail" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmContractBillDto">
-        <include refid="selectBillJoinColumns"/>
+        <include refid="selectBillDetailColumns"/>
         where a.id = #{id}
     </select>
 

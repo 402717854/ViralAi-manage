@@ -189,9 +189,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         select id from crm_customer where deleted = 0 and owner_user = #{ownerUser}
     </select>
 
-    <!-- 数据权限：当前账号作为负责人所服务的渠道ID集合（财务对账仍按渠道收敛） -->
-    <select id="selectOwnedSupplierIds" parameterType="String" resultType="java.lang.Long">
-        select id from crm_supplier where deleted = 0 and owner_user = #{ownerUser}
+    <!-- 获取所有可用渠道 -->
+    <select id="selectAllSupplierIds" resultType="java.lang.Long">
+        SELECT DISTINCT a.supplier_id
+        FROM
+            crm_contract_product a
+                INNER JOIN crm_contract b ON a.contract_id = b.id
+        WHERE
+            b.deleted = 0
+          AND b.STATUS IN (2, 3, 4)
     </select>
 
     <select id="selectExpiredContracts" resultType="CrmContract">

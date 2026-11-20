@@ -3,10 +3,11 @@ package com.ruoyi.crm.service;
 import java.util.List;
 
 import com.ruoyi.crm.dto.CrmContractUsageDto;
-import com.ruoyi.crm.dto.CrmSupplierStatVo;
+import com.ruoyi.crm.dto.CrmCustomerSupplierStatVo;
 import com.ruoyi.crm.dto.CrmUsageBoardVo;
 import com.ruoyi.crm.dto.CrmUsageReconcileResultVo;
 import com.ruoyi.crm.dto.CrmUsageReconcileVo;
+import com.ruoyi.crm.dto.CrmUsageTrendVo;
 
 /**
  * 合同用量对账Service接口
@@ -57,10 +58,21 @@ public interface ICrmContractUsageService
     public CrmUsageBoardVo board(String billCycle);
 
     /**
-     * 渠道对账汇总
+     * 客户 + 渠道维度对账汇总
      *
      * @param billCycle 账期 yyyy-MM，为空取当前账期
-     * @return 渠道汇总
+     * @return 客户渠道汇总
      */
-    public List<CrmSupplierStatVo> selectSupplierStat(String billCycle);
+    public List<CrmCustomerSupplierStatVo> selectCustomerSupplierStat(String billCycle);
+
+    /**
+     * 近 N 期用量趋势（首页趋势图 / 报表复用）
+     *
+     * <p>以「应收 / 成本 / 毛利」三条曲线呈现经营节奏，缺失账期补零保证横轴连续。</p>
+     *
+     * @param billCycle 结束账期 yyyy-MM，为空取当前账期
+     * @param months 期数，为空取 6
+     * @return 按账期升序的趋势
+     */
+    public List<CrmUsageTrendVo> selectUsageTrend(String billCycle, Integer months);
 }

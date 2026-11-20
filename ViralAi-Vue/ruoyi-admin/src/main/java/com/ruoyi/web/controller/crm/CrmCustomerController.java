@@ -86,46 +86,9 @@ public class CrmCustomerController extends BaseController
     }
 
     /**
-     * 查询客户关联的渠道列表
-     * <p>
-     * 客户 1:N 渠道，商机与合同的可选模型范围由该关联决定。
-     */
-    @PreAuthorize("@ss.hasPermi('crm:customer:query')")
-    @GetMapping(value = "/{id}/suppliers")
-    public AjaxResult getSuppliers(@PathVariable("id") Long id)
-    {
-        return success(crmCustomerService.selectSupplierListByCustomerId(id));
-    }
-
-    /**
-     * 查询客户可用的模型清单（客户关联渠道 × 渠道已上架模型）
-     * <p>
-     * 商机与合同明细选择的唯一数据源，每行带所属渠道；前端按渠道分组展示。
-     */
-    @PreAuthorize("@ss.hasAnyPermi('crm:customer:query,crm:business:add,crm:business:edit,crm:contract:add,crm:contract:edit')")
-    @GetMapping(value = "/{id}/product-options")
-    public AjaxResult getProductOptions(@PathVariable("id") Long id)
-    {
-        return success(crmCustomerService.selectProductsByCustomerId(id));
-    }
-
-    /**
-     * 查询客户可用渠道下的账户选项
-     * <p>
-     * 商机/合同明细选择「渠道账户」的下拉数据源，按渠道分组返回；
-     * 只返回账户名、所属渠道、状态与类型，不返回 apiKey 与密码。
-     */
-    @PreAuthorize("@ss.hasAnyPermi('crm:customer:query,crm:account:list,crm:business:add,crm:business:edit,crm:contract:add,crm:contract:edit')")
-    @GetMapping(value = "/{id}/supplier-accounts")
-    public AjaxResult getSupplierAccounts(@PathVariable("id") Long id)
-    {
-        return success(crmCustomerService.selectAccountOptionsByCustomerId(id));
-    }
-
-    /**
      * 新增CRM 客户
      * <p>
-     * 请求体在客户主表字段之外支持 supplierIds，用于一次性提交客户可使用渠道。
+     * 客户资料不再维护关联渠道；渠道与模型的关系在商机、合同明细中维护。
      */
     @PreAuthorize("@ss.hasPermi('crm:customer:add')")
     @Log(title = "CRM 客户", businessType = BusinessType.INSERT)
@@ -140,7 +103,7 @@ public class CrmCustomerController extends BaseController
     /**
      * 修改CRM 客户
      * <p>
-     * supplierIds 为 null 时不涉及渠道变更；为空数组时清空该客户全部渠道；非空时全量替换。
+     * 仅更新客户主表字段，不涉及渠道关联。
      */
     @PreAuthorize("@ss.hasPermi('crm:customer:edit')")
     @Log(title = "CRM 客户", businessType = BusinessType.UPDATE)

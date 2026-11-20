@@ -157,6 +157,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where bill_id is null and usage_type = 0
           and call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
           <if test="supplierId != null"> and supplier_id = #{supplierId}</if>
+          <if test="customerId != null"> and customer_id = #{customerId}</if>
           <if test="matchStatuses != null and matchStatuses.size() > 0">
               and match_status in
               <foreach collection="matchStatuses" item="matchStatus" open="(" separator="," close=")">
@@ -218,8 +219,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where c.deleted = 0
           and c.status = 2
           and c.consumer_id = #{customerId}
-          and (c.sign_time is null or c.sign_time &lt;= #{callTime})
-          and (c.expire_time is null or c.expire_time &gt;= #{callTime})
           and cp.supplier_id = #{supplierId}
           and cp.product_id = #{productId}
           <if test="supplierAccountId != null and supplierAccountId > 0">
@@ -230,7 +229,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 模型编码匹配：product_code 为空的历史数据回退模型型号 no -->
     <select id="selectModelProductsByCode" resultType="com.ruoyi.crm.domain.CrmModelProduct">
-        select id, name, no, product_code, type, source, price_detail, base_sell_price, base_cost_price,
+        select id, name, no, product_code, type, source, price_detail,
                status, deleted
         from crm_model_product
         where deleted = 0 and status = 1
@@ -268,15 +267,45 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
           and call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
     </update>
 
-    <select id="selectUsageByBillId" resultType="com.ruoyi.crm.dto.CrmContractUsageDto">
-        <include refid="selectUsageJoinColumns"/>
+    <!-- 账单详情抽屉的用量明细：只取页面展示字段，不做维表 join；
+         账单可能归集整月流水，调用方必须配合 startPage() 分页 -->
+    <select id="selectUsageItemByBillId" resultType="com.ruoyi.crm.dto.CrmBillUsageItemDto">
+        select a.id, a.call_no, a.product_code, a.total_tokens,
+               a.sell_amount, a.cost_amount, a.gross_profit,
+               a.call_time, a.usage_type, a.match_status
+        from crm_contract_usage a
         where a.bill_id = #{billId}
         order by a.call_time, a.id
     </select>
 
+    <select id="countUsageByBillId" resultType="java.lang.Integer">
+        select count(1) from crm_contract_usage where bill_id = #{billId}
+    </select>
+
+    <!-- 按天拆分子账单：统计口径必须限定 bill_id（本张账单已归集的用量），
+         不能再用 call_time 区间，否则会把账单生成后新增的用量计入子账单，造成父子金额不一致。
+         走 idx_bill_call_time (bill_id, call_time) 复合索引 -->
+    <select id="selectDailyGroupsByBillId" resultType="com.ruoyi.crm.dto.CrmBillDailyGroupDto">
+        select date(call_time)          as bill_date,
+               count(1)                 as usage_count,
+               ifnull(sum(total_tokens), 0) as total_tokens,
+               ifnull(sum(sell_amount), 0)  as total_sell_amount,
+               ifnull(sum(cost_amount), 0)  as total_cost_amount,
+               ifnull(sum(gross_profit), 0) as total_gross_profit
+        from crm_contract_usage
+        where bill_id = #{billId}
+        group by date(call_time)
+        order by bill_date
+    </select>
+
     <!-- 渠道维度统计：调用次数与异常数含失败匹配，金额只统计匹配成功的用量 -->
-    <select id="selectSupplierStat" resultType="com.ruoyi.crm.dto.CrmSupplierStatVo">
-        select a.supplier_id,
+    <!-- 客户 + 渠道维度汇总：按 customer_id + supplier_id 组合聚合。
+         调用数/异常数含匹配失败；token 与金额只统计 match_status = 1。
+         contract_count 用 distinct，避免同一客户多合同重复计数 -->
+    <select id="selectCustomerSupplierStat" resultType="com.ruoyi.crm.dto.CrmCustomerSupplierStatVo">
+        select a.customer_id,
+               cu.name as customer_name,
+               a.supplier_id,
                s.name as supplier_name,
                count(1) as total_calls,
                sum(case when a.match_status = 1 then a.total_tokens else 0 end)    as total_tokens,
@@ -286,6 +315,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                count(distinct case when a.match_status = 1 then a.contract_id end) as contract_count,
                sum(case when a.match_status &lt;&gt; 1 then 1 else 0 end)                as abnormal_count
         from crm_contract_usage a
+        left join crm_customer cu on a.customer_id = cu.id
         left join crm_supplier s on a.supplier_id = s.id
         where a.call_time &gt;= #{startTime} and a.call_time &lt;= #{endTime}
         <if test="supplierIds != null and supplierIds.size() > 0">
@@ -294,15 +324,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 #{supplierId}
             </foreach>
         </if>
-        group by a.supplier_id, s.name
-        order by total_sell_amount desc
+        group by a.customer_id, cu.name, a.supplier_id, s.name
+        order by total_sell_amount desc, total_cost_amount desc, a.customer_id, a.supplier_id
     </select>
 
-    <select id="selectContractRank" resultType="com.ruoyi.crm.dto.CrmContractRankVo">
-        select a.contract_id,
-               ct.contact_no,
-               ct.contract_name,
-               cu.name as customer_name,
+    <!-- 渠道成本排行：只统计匹配成功且成本大于 0 的渠道，按成本倒序 -->
+    <select id="selectSupplierCostRank" resultType="com.ruoyi.crm.dto.CrmSupplierCostRankVo">
+        select a.supplier_id,
                s.name as supplier_name,
                count(1) as total_calls,
                sum(a.total_tokens)   as total_tokens,
@@ -310,8 +338,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                sum(a.cost_amount)    as total_cost_amount,
                sum(a.gross_profit)   as total_gross_profit
         from crm_contract_usage a
-        left join crm_contract ct on a.contract_id = ct.id
-        left join crm_customer cu on a.customer_id = cu.id
         left join crm_supplier s on a.supplier_id = s.id
         where a.match_status = 1
           and a.call_time &gt;= #{startTime} and a.call_time &lt;= #{endTime}
@@ -321,8 +347,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 #{supplierId}
             </foreach>
         </if>
-        group by a.contract_id, ct.contact_no, ct.contract_name, cu.name, s.name
-        order by total_tokens desc
+        group by a.supplier_id, s.name
+        having sum(a.cost_amount) &gt; 0
+        order by total_cost_amount desc
         limit #{limit}
     </select>
 
@@ -341,6 +368,27 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 #{supplierId}
             </foreach>
         </if>
+    </select>
+
+    <!-- 用量趋势：口径与 selectBoardSummary 完全一致，仅多一个按账期分组 -->
+    <select id="selectUsageTrend" resultType="com.ruoyi.crm.dto.CrmUsageTrendVo">
+        select date_format(call_time, '%Y-%m')                                       as bill_cycle,
+               count(1)                                                              as total_calls,
+               ifnull(sum(case when match_status = 1 then total_tokens else 0 end), 0)  as total_tokens,
+               ifnull(sum(case when match_status = 1 then sell_amount else 0 end), 0)   as total_sell_amount,
+               ifnull(sum(case when match_status = 1 then cost_amount else 0 end), 0)   as total_cost_amount,
+               ifnull(sum(case when match_status = 1 then gross_profit else 0 end), 0)  as total_gross_profit,
+               ifnull(sum(case when match_status &lt;&gt; 1 then 1 else 0 end), 0)            as abnormal_count
+        from crm_contract_usage
+        where call_time &gt;= #{startTime} and call_time &lt;= #{endTime}
+        <if test="supplierIds != null and supplierIds.size() > 0">
+            and supplier_id in
+            <foreach collection="supplierIds" item="supplierId" open="(" separator="," close=")">
+                #{supplierId}
+            </foreach>
+        </if>
+        group by date_format(call_time, '%Y-%m')
+        order by bill_cycle asc
     </select>
 
     <select id="selectSupplierIdsWithUsage" resultType="java.lang.Long">

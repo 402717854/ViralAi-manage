@@ -18,6 +18,12 @@ import lombok.Setter;
 @Setter
 public class CrmSupplierProjectDto
 {
+    /** 模型所属供应商ID（crm_supplier_project.project_supplier_id） */
+    private Long projectSupplierId;
+
+    /** 模型所属供应商名称（crm_supplier.name） */
+    private String projectSupplierName;
+
     /** 模型ID（crm_supplier_project.project_id） */
     private Long projectId;
 
@@ -38,13 +44,4 @@ public class CrmSupplierProjectDto
 
     /** 最大售价折扣 */
     private BigDecimal maxSellDiscount;
-
-    /** 最小代理折扣 */
-    private BigDecimal minAgentDiscount;
-
-    /** 最大代理折扣 */
-    private BigDecimal maxAgentDiscount;
-
-    /** 预计日消耗金额 */
-    private BigDecimal dailyUsageAmount;
 }

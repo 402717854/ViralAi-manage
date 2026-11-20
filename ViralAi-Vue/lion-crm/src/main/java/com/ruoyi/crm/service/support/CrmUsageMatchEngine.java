@@ -38,8 +38,8 @@ import com.ruoyi.crm.mapper.CrmContractUsageMapper;
  * <p>账户兼容：流水账户为 0/空（网关未上报）时按渠道匹配；若此时候选仍多于一行，
  * 说明无法确定计费账户，同样判为冲突而非猜测。合同明细账户为空（历史未归属）按通配处理。</p>
  *
- * <p>计费公式：{@code 金额 = token / 1000 * 基准价 * 合同折扣}，保留 4 位小数（四舍五入），
- * 毛利 = 应收 - 成本。基准价与折扣均取自当前时点的快照，写入台账后不再重算。</p>
+ * <p>计费公式：{@code 金额 = 上游费用 * 合同折扣}，保留 8 位小数（四舍五入），
+ * 毛利 = 应收 - 成本。折扣取自当前时点的快照，写入台账后不再重算。</p>
  *
  * @author ruoyi
  * @date 2026-11-04
@@ -94,7 +94,7 @@ public class CrmUsageMatchEngine
         Long accountId = normalizeAccountId(usage.getSupplierAccountId());
         //获取模型+渠道+渠道账户+合同  对应一条行数据
         List<CrmMatchProductDto> candidates = crmContractUsageMapper.selectMatchContractProducts(
-                usage.getCustomerId(), usage.getSupplierId(), accountId, product.getId(), usage.getCallTime());
+                usage.getCustomerId(), usage.getSupplierId(), accountId, product.getId());
         if (candidates.size() > 1)
         {
             // 同客户+渠道+账户+模型存在多行生效明细：脏数据，不自动择一
@@ -103,22 +103,22 @@ public class CrmUsageMatchEngine
 
         if (candidates.isEmpty())
         {
-            List<CrmContract> validContracts = crmContractUsageMapper.selectMatchContracts(
-                    usage.getCustomerId(), usage.getSupplierId(), usage.getCallTime());
-            if (validContracts.isEmpty())
-            {
-                return failWithoutContract(usage);
-            }
-            List<CrmMatchProductDto> sameProductOtherAccount = crmContractUsageMapper.selectMatchContractProducts(
-                    usage.getCustomerId(), usage.getSupplierId(), null, product.getId(), usage.getCallTime());
-            if (!sameProductOtherAccount.isEmpty() && accountId != null)
-            {
-                return fail(usage, UsageMatchStatusEnum.OTHER_ERROR,
-                        "流水账户与合同明细账户不一致，流水账户=" + accountId
-                                + "，合同明细账户=" + describeAccounts(sameProductOtherAccount));
-            }
+//            List<CrmContract> validContracts = crmContractUsageMapper.selectMatchContracts(
+//                    usage.getCustomerId(), usage.getSupplierId(), usage.getCallTime());
+//            if (validContracts.isEmpty())
+//            {
+//                return failWithoutContract(usage);
+//            }
+//            List<CrmMatchProductDto> sameProductOtherAccount = crmContractUsageMapper.selectMatchContractProducts(
+//                    usage.getCustomerId(), usage.getSupplierId(), null, product.getId());
+//            if (!sameProductOtherAccount.isEmpty() && accountId != null)
+//            {
+//                return fail(usage, UsageMatchStatusEnum.OTHER_ERROR,
+//                        "流水账户与合同明细账户不一致，流水账户=" + accountId
+//                                + "，合同明细账户=" + describeAccounts(sameProductOtherAccount));
+//            }
             return fail(usage, UsageMatchStatusEnum.PRODUCT_NOT_IN_CONTRACT,
-                    "生效合同的模型清单中不含 " + usage.getProductCode()
+                    "该客户:"+usage.getCustomerId()+"生效合同的模型清单中不含 " + usage.getProductCode()
                             + "（渠道 " + usage.getSupplierId() + "，账户 " + accountLabel(accountId) + "）");
         }
 
@@ -128,22 +128,18 @@ public class CrmUsageMatchEngine
             return fail(usage, UsageMatchStatusEnum.OTHER_ERROR,
                     "合同明细折扣缺失，无法计费，合同=" + hit.getContactNo());
         }
-//        if (product.getBaseSellPrice() == null || product.getBaseCostPrice() == null)
-//        {
-//            return fail(usage, UsageMatchStatusEnum.OTHER_ERROR,
-//                    "模型基准价缺失，请在模型产品中维护：" + usage.getProductCode());
-//        }
         // actual_fees 允许为空（历史流水未上报该口径），统一按 0 参与计算，避免空指针
         BigDecimal actualFees = usage.getActualFees() == null ? BigDecimal.ZERO : usage.getActualFees();
         BigDecimal sellAmount = actualFees;//售价
         BigDecimal costAmount =BigDecimal.ZERO;//成本价
         BigDecimal totalFees = usage.getTotalFees() == null ? BigDecimal.ZERO : usage.getTotalFees();
-        if(totalFees.compareTo(BigDecimal.ZERO)>0){
+        if(totalFees.compareTo(BigDecimal.ZERO)>0&&sellAmount.compareTo(BigDecimal.ZERO)==0){
             sellAmount = totalFees
                     .multiply(hit.getSellDiscount())
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
             usage.setActualFees(sellAmount);
-        }else if(actualFees.compareTo(BigDecimal.ZERO)>0){
+        }
+        if(actualFees.compareTo(BigDecimal.ZERO)>0&&totalFees.compareTo(BigDecimal.ZERO)==0){
             totalFees = actualFees
                     .divide(hit.getSellDiscount(),AMOUNT_SCALE,RoundingMode.HALF_UP);
             usage.setTotalFees(totalFees);
@@ -158,8 +154,6 @@ public class CrmUsageMatchEngine
             // 流水未归属账户时按合同明细回填，保证台账/账单可按账户归集
             usage.setSupplierAccountId(hit.getSupplierAccountId() == null ? 0L : hit.getSupplierAccountId());
         }
-        usage.setBaseSellPrice(product.getBaseSellPrice());
-        usage.setBaseCostPrice(product.getBaseCostPrice());
         usage.setSellDiscount(hit.getSellDiscount());
         usage.setCostDiscount(hit.getCostDiscount());
         usage.setSellAmount(sellAmount);

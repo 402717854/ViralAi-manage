@@ -363,6 +363,18 @@
             <el-option v-for="item in supplierOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="客户" prop="customerId">
+          <el-select
+            v-model="reconcileForm.customerId"
+            placeholder="不选表示全部客户"
+            filterable
+            clearable
+            :loading="customerLoading"
+            style="width: 100%"
+          >
+            <el-option v-for="item in customerOptions" :key="item.id" :label="item.name" :value="item.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="重试异常记录">
           <el-switch v-model="reconcileForm.retryAbnormal" />
           <span class="form-tip">开启后对「无合同 / 已过期 / 其他异常」的台账重新匹配，补签合同后使用</span>
@@ -371,7 +383,7 @@
           type="info"
           :closable="false"
           show-icon
-          title="对账会扫描区间内未生成台账的网关流水，按客户+渠道+模型匹配生效合同并计费；已生成账单的用量不会被重算。"
+          title="对账会扫描区间内未生成台账的网关流水，按客户+渠道+模型匹配生效合同并计费；已生成账单的用量不会被重算。指定客户后只处理该客户的流水，适合补签合同后单独补对账。"
         />
       </el-form>
       <template #footer>
@@ -745,6 +757,7 @@ const reconcileRef = ref()
 const reconcileForm = ref({
   timeRange: [],
   supplierId: undefined,
+  customerId: undefined,
   retryAbnormal: true
 })
 
@@ -759,6 +772,7 @@ function openReconcile() {
   reconcileForm.value = {
     timeRange: [parseTime(start, "{y}-{m}-{d} 00:00:00"), parseTime(end, "{y}-{m}-{d} 23:59:59")],
     supplierId: undefined,
+    customerId: undefined,
     retryAbnormal: true
   }
   reconcileOpen.value = true
@@ -775,6 +789,7 @@ function submitReconcile() {
       startTime: reconcileForm.value.timeRange[0],
       endTime: reconcileForm.value.timeRange[1],
       supplierId: reconcileForm.value.supplierId,
+      customerId: reconcileForm.value.customerId,
       retryAbnormal: reconcileForm.value.retryAbnormal
     }).then(res => {
       const r = res.data || {}

@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,10 +22,12 @@ import com.ruoyi.crm.domain.CrmContractUsage;
 import com.ruoyi.crm.domain.GatewayCallLog;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
 import com.ruoyi.crm.dto.CrmContractUsageDto;
-import com.ruoyi.crm.dto.CrmSupplierStatVo;
+import com.ruoyi.crm.dto.CrmCustomerSupplierStatVo;
+import com.ruoyi.crm.dto.CrmSupplierCostRankVo;
 import com.ruoyi.crm.dto.CrmUsageBoardVo;
 import com.ruoyi.crm.dto.CrmUsageReconcileResultVo;
 import com.ruoyi.crm.dto.CrmUsageReconcileVo;
+import com.ruoyi.crm.dto.CrmUsageTrendVo;
 import com.ruoyi.crm.enums.BillDiffHandleStatusEnum;
 import com.ruoyi.crm.enums.BillDiffTypeEnum;
 import com.ruoyi.crm.enums.UsageMatchStatusEnum;
@@ -55,8 +59,11 @@ import com.ruoyi.crm.service.support.CrmUsageMatchEngine;
 @Service
 public class CrmContractUsageServiceImpl implements ICrmContractUsageService
 {
-    /** 合同维度排行取前 N 条 */
+    /** 渠道成本排行取前 N 条 */
     private static final int RANK_LIMIT = 10;
+
+    /** 趋势默认期数（近 6 期） */
+    private static final int TREND_MONTHS = 6;
 
     @Autowired
     private CrmContractUsageMapper crmContractUsageMapper;
@@ -106,6 +113,7 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
             throw new ServiceException("对账起始时间不能晚于结束时间");
         }
         Long supplierId = vo == null ? null : vo.getSupplierId();
+        Long customerId = vo == null ? null : vo.getCustomerId();
         Boolean retryAbnormal = vo == null ? null : vo.getRetryAbnormal();
         if (supplierId != null)
         {
@@ -140,8 +148,8 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
 
         for (Long target : targets)
         {
-            reconcileCallLogs(target, start, end, result);
-            retryUsages(target, start, end, retryAbnormal, scope, result);
+            reconcileCallLogs(target, customerId, start, end, result);
+//            retryUsages(target, customerId, start, end, retryAbnormal, scope, result);
         }
         return result;
     }
@@ -150,13 +158,15 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
      * 新流水生成本台账并立即匹配
      *
      * @param supplierId 渠道ID，为空表示不限
+     * @param customerId 客户ID，为空表示不限
      * @param start 起始
      * @param end 结束
      * @param result 结果累计
      */
-    private void reconcileCallLogs(Long supplierId, Date start, Date end, CrmUsageReconcileResultVo result)
+    private void reconcileCallLogs(Long supplierId, Long customerId, Date start, Date end,
+                                   CrmUsageReconcileResultVo result)
     {
-        List<GatewayCallLog> logs = gatewayCallLogMapper.selectReconcileCallLogs(start, end, supplierId);
+        List<GatewayCallLog> logs = gatewayCallLogMapper.selectReconcileCallLogs(start, end, supplierId, customerId);
         for (GatewayCallLog callLog : logs)
         {
             result.setScanned(result.getScanned() + 1);
@@ -196,13 +206,14 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
      * 未匹配（或需重试）台账重新匹配
      *
      * @param supplierId 渠道ID，为空表示不限
+     * @param customerId 客户ID，为空表示不限
      * @param start 起始
      * @param end 结束
      * @param retryAbnormal 是否包含异常记录
      * @param scope 数据权限渠道集合
      * @param result 结果累计
      */
-    private void retryUsages(Long supplierId, Date start, Date end, Boolean retryAbnormal,
+    private void retryUsages(Long supplierId, Long customerId, Date start, Date end, Boolean retryAbnormal,
                              List<Long> scope, CrmUsageReconcileResultVo result)
     {
         List<Integer> statuses;
@@ -221,7 +232,8 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
                     UsageMatchStatusEnum.OTHER_ERROR.getCode(),
                     UsageMatchStatusEnum.CONTRACT_CONFLICT.getCode());
         }
-        List<CrmContractUsage> usages = crmContractUsageMapper.selectRematchUsages(start, end, supplierId, statuses, scope);
+        List<CrmContractUsage> usages = crmContractUsageMapper.selectRematchUsages(start, end, supplierId, customerId,
+                statuses, scope);
         for (CrmContractUsage usage : usages)
         {
             result.setScanned(result.getScanned() + 1);
@@ -292,8 +304,9 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
         }
         board.setBillCycle(cycle);
 
-        List<CrmSupplierStatVo> supplierStats = crmContractUsageMapper.selectSupplierStat(range[0], range[1], scope);
-        for (CrmSupplierStatVo stat : supplierStats)
+        List<CrmCustomerSupplierStatVo> customerSupplierStats = crmContractUsageMapper
+                .selectCustomerSupplierStat(range[0], range[1], scope);
+        for (CrmCustomerSupplierStatVo stat : customerSupplierStats)
         {
             stat.setProfitRate(rate(stat.getTotalGrossProfit(), stat.getTotalSellAmount()));
             BigDecimal calls = stat.getTotalCalls() == null ? BigDecimal.ZERO : BigDecimal.valueOf(stat.getTotalCalls());
@@ -301,8 +314,18 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
                     : BigDecimal.valueOf(stat.getAbnormalCount());
             stat.setAbnormalRate(rate(abnormal, calls));
         }
-        board.setSupplierStats(supplierStats);
-        board.setContractRank(crmContractUsageMapper.selectContractRank(range[0], range[1], scope, RANK_LIMIT));
+        board.setCustomerSupplierStats(customerSupplierStats);
+
+        // 成本占比以概览的成本总额为分母，保证排行里各行占比之和不超过 100%（TOP10 截断属正常）
+        BigDecimal totalCost = board.getTotalCostAmount();
+        List<CrmSupplierCostRankVo> supplierCostRank = crmContractUsageMapper
+                .selectSupplierCostRank(range[0], range[1], scope, RANK_LIMIT);
+        for (CrmSupplierCostRankVo rank : supplierCostRank)
+        {
+            rank.setCostRate(rate(rank.getTotalCostAmount(), totalCost));
+            rank.setProfitRate(rate(rank.getTotalGrossProfit(), rank.getTotalSellAmount()));
+        }
+        board.setSupplierCostRank(supplierCostRank);
         board.setProfitRate(rate(board.getTotalGrossProfit(), board.getTotalSellAmount()));
 
         BigDecimal calls = board.getTotalCalls() == null ? BigDecimal.ZERO : BigDecimal.valueOf(board.getTotalCalls());
@@ -315,19 +338,62 @@ public class CrmContractUsageServiceImpl implements ICrmContractUsageService
     }
 
     @Override
-    public List<CrmSupplierStatVo> selectSupplierStat(String billCycle)
+    public List<CrmCustomerSupplierStatVo> selectCustomerSupplierStat(String billCycle)
     {
         String cycle = CrmBillCycleUtils.normalize(billCycle);
         Date[] range = CrmBillCycleUtils.rangeOf(cycle);
         List<Long> scope = crmFinanceDataScope.scopeSupplierIds();
-        List<CrmSupplierStatVo> list = crmContractUsageMapper.selectSupplierStat(range[0], range[1], scope);
-        for (CrmSupplierStatVo stat : list)
+        List<CrmCustomerSupplierStatVo> list = crmContractUsageMapper
+                .selectCustomerSupplierStat(range[0], range[1], scope);
+        for (CrmCustomerSupplierStatVo stat : list)
         {
             stat.setProfitRate(rate(stat.getTotalGrossProfit(), stat.getTotalSellAmount()));
             BigDecimal calls = stat.getTotalCalls() == null ? BigDecimal.ZERO : BigDecimal.valueOf(stat.getTotalCalls());
             BigDecimal abnormal = stat.getAbnormalCount() == null ? BigDecimal.ZERO
                     : BigDecimal.valueOf(stat.getAbnormalCount());
             stat.setAbnormalRate(rate(abnormal, calls));
+        }
+        return list;
+    }
+
+    @Override
+    public List<CrmUsageTrendVo> selectUsageTrend(String billCycle, Integer months)
+    {
+        String cycle = CrmBillCycleUtils.normalize(billCycle);
+        List<String> cycles = CrmBillCycleUtils.recentCycles(cycle, months == null ? TREND_MONTHS : months);
+
+        // 一次查询覆盖整个区间：逐期调用 board 会额外触发账单数、待处理差异等统计，6 期就是 18 次查询
+        Date start = CrmBillCycleUtils.rangeOf(cycles.get(0))[0];
+        Date end = CrmBillCycleUtils.rangeOf(cycles.get(cycles.size() - 1))[1];
+        List<Long> scope = crmFinanceDataScope.scopeSupplierIds();
+
+        Map<String, CrmUsageTrendVo> indexed = new HashMap<>();
+        for (CrmUsageTrendVo row : crmContractUsageMapper.selectUsageTrend(start, end, scope))
+        {
+            indexed.put(row.getBillCycle(), row);
+        }
+
+        List<CrmUsageTrendVo> list = new ArrayList<>(cycles.size());
+        for (String item : cycles)
+        {
+            CrmUsageTrendVo vo = indexed.get(item);
+            if (vo == null)
+            {
+                // 该期无任何用量：补零占位，防止横轴跳月
+                vo = CrmUsageTrendVo.emptyOf(item);
+            }
+            if (vo.getTotalCalls() == null)
+            {
+                vo.setTotalCalls(0L);
+            }
+            if (vo.getAbnormalCount() == null)
+            {
+                vo.setAbnormalCount(0L);
+            }
+            vo.setProfitRate(rate(vo.getTotalGrossProfit(), vo.getTotalSellAmount()));
+            vo.setAbnormalRate(rate(BigDecimal.valueOf(vo.getAbnormalCount()),
+                    BigDecimal.valueOf(vo.getTotalCalls())));
+            list.add(vo);
         }
         return list;
     }

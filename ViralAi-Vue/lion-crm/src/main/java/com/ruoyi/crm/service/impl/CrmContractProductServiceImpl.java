@@ -23,16 +23,16 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.crm.domain.CrmContract;
 import com.ruoyi.crm.domain.CrmContractLog;
 import com.ruoyi.crm.domain.CrmContractProduct;
+import com.ruoyi.crm.dto.CrmChannelProductDto;
 import com.ruoyi.crm.dto.CrmContractProductDto;
-import com.ruoyi.crm.dto.CrmCustomerProductDto;
 import com.ruoyi.crm.dto.CrmSupplierAccountDto;
 import com.ruoyi.crm.enums.ContractActionEnum;
 import com.ruoyi.crm.enums.ContractStatusEnum;
 import com.ruoyi.crm.mapper.CrmContractLogMapper;
 import com.ruoyi.crm.mapper.CrmContractMapper;
 import com.ruoyi.crm.mapper.CrmContractProductMapper;
-import com.ruoyi.crm.mapper.CrmCustomerSupplierMapper;
 import com.ruoyi.crm.mapper.CrmSupplierAccountMapper;
+import com.ruoyi.crm.mapper.CrmSupplierMapper;
 import com.ruoyi.crm.service.ICrmContractProductService;
 import com.ruoyi.crm.service.support.CrmContractDataScope;
 
@@ -42,7 +42,7 @@ import com.ruoyi.crm.service.support.CrmContractDataScope;
  * <p>核心校验（前端绕过也无法写入脏数据）：</p>
  * <ol>
  *   <li>合同必须存在且为草稿状态；</li>
- *   <li>每行的「渠道 + 模型」必须命中该客户的已开通渠道及其上架模型（crm_customer_supplier × crm_supplier_project）；</li>
+ *   <li>每行的「渠道 + 模型」必须命中启用渠道及其已上架模型（crm_supplier × crm_supplier_project）；</li>
  *   <li>每行必须指定渠道账户（crm_supplier_account.id），且账户须属于该行所选渠道；</li>
  *   <li>同一合同内「渠道 + 模型」不可重复（同一模型可在不同渠道各出现一次）；</li>
  *   <li>成本折扣、售卖折扣取值范围 0.01 ~ 1.00，保留两位小数；</li>
@@ -73,7 +73,7 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
     private CrmContractProductMapper crmContractProductMapper;
 
     @Autowired
-    private CrmCustomerSupplierMapper crmCustomerSupplierMapper;
+    private CrmSupplierMapper crmSupplierMapper;
 
     @Autowired
     private CrmSupplierAccountMapper crmSupplierAccountMapper;
@@ -142,7 +142,7 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
                 retainedMap.put(productKey(old.getSupplierId(), old.getProductId()), old);
             }
         }
-        List<CrmContractProduct> entities = buildEntities(contractId, consumerId, list, userId, now, retainedMap);
+        List<CrmContractProduct> entities = buildEntities(contractId, list, userId, now, retainedMap);
         if (signed && entities.isEmpty())
         {
             throw new ServiceException("已签约合同的模型明细不能为空，请至少保留一条");
@@ -205,19 +205,19 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
     /**
      * 构建并校验明细实体
      * <p>
-     * 渠道由明细行承载：每行必须显式指定 supplierId，且「渠道 + 模型」必须命中
-     * 客户已开通渠道及该渠道已上架的模型；同时每行必须指定该渠道下的账户（supplierAccountId）。
+     * 渠道模型关系由本模块的明细行维护：每行必须显式指定 supplierId、productId 与
+     * supplierAccountId，且「渠道 + 模型」必须命中启用渠道及其已上架模型
+     * （crm_supplier × crm_supplier_project），账户必须属于该行所选渠道。
      *
      * @param contractId 合同ID
-     * @param consumerId 客户ID
      * @param list 入参明细
      * @param userId 操作人
      * @param now 当前时间
      * @param retainedMap 既有明细索引（键为「渠道:模型」），命中时按已签约合同的宽松口径校验：
-     *                    沿用原账户可豁免账户有效性，改账户仍须为该客户的可用账户
+     *                    沿用原账户可豁免账户有效性，改账户仍须为该渠道下的可用账户
      * @return 明细实体集合
      */
-    private List<CrmContractProduct> buildEntities(Long contractId, Long consumerId,
+    private List<CrmContractProduct> buildEntities(Long contractId,
                                                    List<CrmContractProductDto> list,
                                                    Long userId, Date now,
                                                    Map<String, CrmContractProductDto> retainedMap)
@@ -228,9 +228,9 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
             return entities;
         }
 
-        // 客户可用模型：客户关联渠道 × 渠道已上架模型，键为「渠道ID:模型ID」
+        // 可售模型：启用渠道 × 渠道已上架模型，键为「渠道ID:模型ID」
         Set<String> availableKeys = new HashSet<>();
-        for (CrmCustomerProductDto product : crmCustomerSupplierMapper.selectProductsByCustomerId(consumerId))
+        for (CrmChannelProductDto product : crmSupplierMapper.selectChannelProductOptions())
         {
             if (product.getId() != null && product.getSupplierId() != null)
             {
@@ -239,12 +239,12 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
         }
         if (availableKeys.isEmpty())
         {
-            throw new ServiceException("该客户未开通任何渠道，或已开通渠道下没有可用模型，无法添加明细");
+            throw new ServiceException("系统内暂无可用渠道模型（渠道需启用且已上架有效模型），无法添加明细");
         }
 
-        // 客户可用渠道账户：账户必须存在且属于该行选定的渠道
+        // 渠道账户：账户必须存在且属于该行选定的渠道
         Map<Long, CrmSupplierAccountDto> accountMap = new HashMap<>();
-        for (CrmSupplierAccountDto account : crmSupplierAccountMapper.selectAccountOptionsByCustomerId(consumerId))
+        for (CrmSupplierAccountDto account : crmSupplierAccountMapper.selectChannelAccountOptions())
         {
             if (account.getId() != null && account.getSupplierId() != null)
             {
@@ -253,7 +253,7 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
         }
         if (accountMap.isEmpty())
         {
-            throw new ServiceException("该客户的已开通渠道下没有可用账户，请先在「渠道账户管理」中维护账户");
+            throw new ServiceException("系统内暂无可用渠道账户，请先在「渠道账户管理」中维护账户");
         }
 
         Set<String> seenKeys = new HashSet<>();
@@ -278,14 +278,14 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
             CrmSupplierAccountDto account = accountMap.get(dto.getSupplierAccountId());
             if (old != null)
             {
-                // 既有行：沿用原账户时豁免账户有效性；更换账户仍须命中客户可用账户且渠道匹配
+                // 既有行：沿用原账户时豁免账户有效性；更换账户仍须命中该渠道下的可用账户
                 boolean sameAccount = Objects.equals(old.getSupplierAccountId(), dto.getSupplierAccountId());
                 if (!sameAccount)
                 {
                     if (account == null)
                     {
                         throw new ServiceException(StringUtils.format(
-                                "第 {} 行渠道账户不存在或不属于该客户的已开通渠道", rowNo));
+                                "第 {} 行渠道账户不存在或所属渠道已停用", rowNo));
                     }
                     if (!account.getSupplierId().equals(dto.getSupplierId()))
                     {
@@ -302,7 +302,7 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
                 if (account == null)
                 {
                     throw new ServiceException(StringUtils.format(
-                            "第 {} 行渠道账户不存在或不属于该客户的已开通渠道", rowNo));
+                            "第 {} 行渠道账户不存在或所属渠道已停用", rowNo));
                 }
                 if (!account.getSupplierId().equals(dto.getSupplierId()))
                 {
@@ -311,7 +311,7 @@ public class CrmContractProductServiceImpl implements ICrmContractProductService
                 if (!availableKeys.contains(key))
                 {
                     throw new ServiceException(StringUtils.format(
-                            "第 {} 行模型不在该客户的可用渠道内（渠道需已开通且模型需已上架），禁止添加", rowNo));
+                            "第 {} 行渠道未启用或该模型未在渠道上架，禁止添加", rowNo));
                 }
             }
             if (!seenKeys.add(key))

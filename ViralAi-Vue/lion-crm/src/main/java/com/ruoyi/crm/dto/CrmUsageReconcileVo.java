@@ -7,7 +7,8 @@ import lombok.Setter;
  * 手动对账请求对象
  *
  * <p>时间区间支持 {@code yyyy-MM-dd} 与 {@code yyyy-MM-dd HH:mm:ss} 两种格式；
- * 只传日期时，起始补 00:00:00、结束补 23:59:59。supplierId 为空表示全部渠道。</p>
+ * 只传日期时，起始补 00:00:00、结束补 23:59:59。supplierId 为空表示全部渠道，
+ * customerId 为空表示全部客户。三个条件为「与」关系，同时指定时只对账该客户在该渠道下的流水。</p>
  *
  * @author ruoyi
  * @date 2026-11-04
@@ -24,6 +25,13 @@ public class CrmUsageReconcileVo
 
     /** 渠道ID，为空表示全部渠道 */
     private Long supplierId;
+
+    /**
+     * 客户ID，为空表示全部客户
+     * <p>仅收窄待对账流水的扫描范围，不改变匹配逻辑：匹配仍以流水自身的客户 + 渠道 + 模型
+     * 去命中生效合同。用于补签合同后按客户单独补对账，避免整渠道全量重扫。</p>
+     */
+    private Long customerId;
 
     /**
      * 渠道账户ID，为空表示该渠道下全部启用账户

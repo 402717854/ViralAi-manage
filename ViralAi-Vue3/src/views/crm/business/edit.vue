@@ -36,7 +36,7 @@
               >
                 <el-option v-for="item in customerOptions" :key="item.id" :label="item.name" :value="item.id" />
               </el-select>
-              <div class="field-tip">渠道由下方意向明细逐行选择，可选范围限定为该客户已关联的渠道</div>
+              <div class="field-tip">渠道与模型由下方意向明细逐行选择，保存时校验渠道已启用、模型已在渠道上架、账户归属该渠道</div>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -98,7 +98,7 @@
           type="info"
           :closable="false"
           show-icon
-          title="请先选择客户，可选模型仅来源于该客户已关联渠道下的模型产品"
+          title="请先选择客户，可选模型取自渠道已上架模型，明细保存时强制校验渠道与账户归属"
           class="mb8"
         />
         <el-alert
@@ -194,60 +194,72 @@
       <el-button @click="handleBack">返 回</el-button>
     </div>
 
-    <!-- 添加渠道模型 -->
-    <el-dialog title="添加渠道模型" v-model="modelDialogOpen" width="1020px" append-to-body>
-      <el-input v-model="modelKeyword" placeholder="输入型号或厂商筛选" clearable class="mb8" style="width: 260px" />
-      <div class="field-tip mb8">渠道账户为必填项，默认带出该渠道的启用账户，可逐行改选；渠道下无可用账户时该模型不可勾选</div>
-      <el-table
-        ref="modelTableRef"
-        :data="filteredModels"
-        border
-        size="small"
-        height="360"
-        row-key="key"
-        empty-text="该客户暂无可添加的渠道模型，请先在客户资料中关联渠道"
-        @selection-change="handleModelSelectionChange"
-      >
-        <el-table-column type="selection" width="50" align="center" reserve-selection :selectable="isModelSelectable" />
-        <el-table-column label="渠道" min-width="140" show-overflow-tooltip>
-          <template #default="scope">{{ scope.row.supplierName || "-" }}</template>
-        </el-table-column>
-        <el-table-column label="渠道账户" min-width="200">
-          <template #default="scope">
-            <el-select
-              :model-value="modelAccountMap[scope.row.key]"
-              placeholder="请选择渠道账户"
-              filterable
-              size="small"
-              style="width: 100%"
-              @change="value => handleDialogAccountChange(scope.row, value)"
-            >
-              <el-option
-                v-for="item in dialogAccountOptions(scope.row)"
-                :key="item.id"
-                :label="item.label"
-                :value="item.id"
-              />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="模型型号" min-width="140" show-overflow-tooltip>
-          <template #default="scope">{{ scope.row.no || scope.row.name }}</template>
-        </el-table-column>
-        <el-table-column label="模型厂商" min-width="140" show-overflow-tooltip>
-          <template #default="scope">{{ scope.row.name || "-" }}</template>
-        </el-table-column>
-        <el-table-column label="成本折扣区间" width="140" align="center">
-          <template #default="scope">{{ formatRange(scope.row.minCostDiscount, scope.row.maxCostDiscount) }}</template>
-        </el-table-column>
-        <el-table-column label="售卖折扣区间" width="140" align="center">
-          <template #default="scope">{{ formatRange(scope.row.minSellDiscount, scope.row.maxSellDiscount) }}</template>
-        </el-table-column>
-      </el-table>
+    <!-- 添加渠道模型：先选渠道 → 再选渠道账户 → 再选模型型号 -->
+    <el-dialog title="添加渠道模型" v-model="modelDialogOpen" width="620px" append-to-body @closed="resetPick">
+      <el-form label-width="90px">
+        <el-form-item label="渠道" required>
+          <el-select
+            v-model="pick.supplierId"
+            placeholder="请选择渠道"
+            filterable
+            style="width: 100%"
+            @change="handlePickSupplierChange"
+          >
+            <el-option
+              v-for="item in pickSupplierOptions"
+              :key="item.id"
+              :label="item.label"
+              :value="item.id"
+              :disabled="item.disabled"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="渠道账户" required>
+          <el-select
+            v-model="pick.accountId"
+            :disabled="isEmptyVal(pick.supplierId)"
+            :placeholder="isEmptyVal(pick.supplierId) ? '请先选择渠道' : '请选择渠道账户'"
+            filterable
+            style="width: 100%"
+          >
+            <el-option v-for="item in pickAccountOptions" :key="item.id" :label="accountLabel(item)" :value="item.id" />
+          </el-select>
+          <div v-if="!isEmptyVal(pick.supplierId) && !pickAccountOptions.length" class="field-tip">
+            该渠道暂无可用账户，请先在「渠道账户管理」中维护
+          </div>
+        </el-form-item>
+        <el-form-item label="模型型号" required>
+          <el-select
+            v-model="pick.productIds"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            filterable
+            :disabled="isEmptyVal(pick.supplierId)"
+            :placeholder="isEmptyVal(pick.supplierId) ? '请先选择渠道' : '请选择模型型号，可多选'"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in pickProductOptions"
+              :key="item.id"
+              :label="`${item.no || item.name}（${item.name}）`"
+              :value="item.id"
+            />
+          </el-select>
+          <div class="field-tip">
+            已添加过的「渠道 + 模型」不再出现在下拉中；成本/售卖折扣默认取该渠道配置下限，添加后可在明细中调整
+          </div>
+        </el-form-item>
+      </el-form>
       <template #footer>
-        <div class="dialog-footer">
-          <el-button type="primary" @click="confirmAddModels">添 加（{{ selectedModels.length }}）</el-button>
-          <el-button @click="modelDialogOpen = false">取 消</el-button>
+        <div class="dialog-footer dialog-footer--spread">
+          <span class="field-tip">
+            {{ pickAddedCount ? `本次已添加 ${pickAddedCount} 项，可切换渠道继续添加` : "按「渠道 → 渠道账户 → 模型型号」顺序选择后添加" }}
+          </span>
+          <div>
+            <el-button type="primary" @click="confirmAddModels">添 加</el-button>
+            <el-button @click="modelDialogOpen = false">关 闭</el-button>
+          </div>
         </div>
       </template>
     </el-dialog>
@@ -277,7 +289,8 @@
 
 <script setup name="BusinessEdit">
 import { getBusiness, saveBusiness } from "@/api/crm/business"
-import { getCustomerOptions, getCustomerProductOptions, getCustomerSupplierAccounts } from "@/api/crm/customer"
+import { getCustomerOptions } from "@/api/crm/customer"
+import { getChannelProductOptions, getChannelAccountOptions } from "@/api/crm/supplier"
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
@@ -305,16 +318,15 @@ const submitting = ref(false)
 const customerOptions = ref([])
 const customerLoading = ref(false)
 
-/** 客户已关联渠道下的可用模型（渠道-模型组合） */
+/** 渠道可售模型（渠道-模型组合），可选范围由渠道上架关系决定，与客户无关 */
 const models = ref([])
-/** 客户可用渠道下的账户（渠道-账户组合） */
+/** 渠道账户（渠道-账户组合），明细行需指定账户 */
 const supplierAccounts = ref([])
-/** 弹窗内每行选择的渠道账户：key 为「渠道:模型」 */
-const modelAccountMap = reactive({})
 const modelDialogOpen = ref(false)
-const modelKeyword = ref("")
-const modelTableRef = ref()
-const selectedModels = ref([])
+/** 弹窗级联选择状态：渠道 → 渠道账户 → 模型型号（可多选） */
+const pick = reactive({ supplierId: null, accountId: null, productIds: [] })
+/** 本次弹窗会话已添加条数（支持切换渠道连续添加，不关闭弹窗） */
+const pickAddedCount = ref(0)
 
 /** 意向产品清单 */
 const products = ref([])
@@ -357,40 +369,57 @@ function rowKey(supplierId, productId) {
   return `${supplierId}:${productId}`
 }
 
-/** 可选模型：过滤已添加的渠道-模型组合与关键字 */
-const filteredModels = computed(() => {
-  const keyword = modelKeyword.value.trim().toLowerCase()
-  const exists = new Set(products.value.map(item => rowKey(item.supplierId, item.productId)))
-  return models.value
-    .map(item => ({ ...item, key: rowKey(item.supplierId, item.id) }))
-    .filter(item => {
-      if (exists.has(item.key)) {
-        return false
-      }
-      if (!keyword) {
-        return true
-      }
-      return `${item.no || ""}${item.name || ""}`.toLowerCase().includes(keyword)
-    })
+/** 弹窗渠道下拉：由可售模型反推渠道；无账户或模型已全部添加的渠道置灰 */
+const pickSupplierOptions = computed(() => {
+  const addedKeys = new Set(products.value.map(item => rowKey(item.supplierId, item.productId)))
+  const group = new Map()
+  models.value.forEach(item => {
+    const key = String(item.supplierId)
+    if (!group.has(key)) {
+      group.set(key, {
+        id: item.supplierId,
+        name: item.supplierName || `渠道 ${item.supplierId}`,
+        remaining: 0
+      })
+    }
+    if (!addedKeys.has(rowKey(item.supplierId, item.id))) {
+      group.get(key).remaining += 1
+    }
+  })
+  return Array.from(group.values()).map(entry => {
+    const noAccount = accountsOfSupplier(entry.id).length === 0
+    const noModel = entry.remaining === 0
+    let label = entry.name
+    if (noAccount) {
+      label += "（无可用账户）"
+    } else if (noModel) {
+      label += "（模型已全部添加）"
+    }
+    return { ...entry, label, disabled: noAccount || noModel }
+  })
+})
+
+/** 弹窗账户下拉：限定当前所选渠道 */
+const pickAccountOptions = computed(() => {
+  if (isEmptyVal(pick.supplierId)) {
+    return []
+  }
+  return accountsOfSupplier(pick.supplierId)
+})
+
+/** 弹窗模型下拉：限定当前所选渠道，并剔除已添加的「渠道 + 模型」组合 */
+const pickProductOptions = computed(() => {
+  if (isEmptyVal(pick.supplierId)) {
+    return []
+  }
+  const addedKeys = new Set(products.value.map(item => rowKey(item.supplierId, item.productId)))
+  return models.value.filter(item =>
+    String(item.supplierId) === String(pick.supplierId) && !addedKeys.has(rowKey(item.supplierId, item.id))
+  )
 })
 
 function isEmptyVal(val) {
   return val === null || val === undefined || val === ""
-}
-
-function formatRange(min, max) {
-  const minText = isEmptyVal(min) ? null : Number(min).toFixed(2)
-  const maxText = isEmptyVal(max) ? null : Number(max).toFixed(2)
-  if (minText === null && maxText === null) {
-    return "-"
-  }
-  if (minText === null) {
-    return `≤ ${maxText}`
-  }
-  if (maxText === null) {
-    return `≥ ${minText}`
-  }
-  return `${minText} ~ ${maxText}`
 }
 
 function loadCustomerOptions() {
@@ -402,20 +431,15 @@ function loadCustomerOptions() {
   })
 }
 
-/** 加载客户已关联渠道下的可用模型与渠道账户（与合同明细同一数据源） */
-function loadCustomerData(customerId) {
-  if (isEmptyVal(customerId)) {
-    models.value = []
-    supplierAccounts.value = []
-    return Promise.resolve()
-  }
+/** 加载渠道可售模型与渠道账户（与合同明细同一数据源） */
+function loadChannelData() {
   return Promise.all([
-    getCustomerProductOptions(customerId).then(res => {
+    getChannelProductOptions().then(res => {
       models.value = res.data || []
     }).catch(() => {
       models.value = []
     }),
-    getCustomerSupplierAccounts(customerId).then(res => {
+    getChannelAccountOptions().then(res => {
       supplierAccounts.value = res.data || []
     }).catch(() => {
       supplierAccounts.value = []
@@ -458,11 +482,6 @@ function rowAccountOptions(row) {
   return list
 }
 
-/** 弹窗内账户下拉（与明细行同源） */
-function dialogAccountOptions(model) {
-  return accountsOfSupplier(model.supplierId).map(item => ({ id: item.id, label: accountLabel(item) }))
-}
-
 /** 明细行切换渠道账户：同步账户名，便于未刷新时展示 */
 function handleRowAccountChange(row, accountId) {
   const hit = supplierAccounts.value.find(item => String(item.id) === String(accountId))
@@ -470,25 +489,27 @@ function handleRowAccountChange(row, accountId) {
   row.supplierAccountName = hit ? hit.accountName : ""
 }
 
-/** 弹窗内切换渠道账户 */
-function handleDialogAccountChange(model, accountId) {
-  modelAccountMap[model.key] = accountId
-}
-
-/** 渠道下没有账户时不可勾选（没有账户无法提交，避免无效选择） */
-function isModelSelectable(model) {
-  return accountsOfSupplier(model.supplierId).length > 0
-}
-
-/** 客户变更：原明细的渠道已不属于新客户，需清空后重新选择 */
-function handleCustomerChange(value) {
+/** 客户变更：业务主体变化，原意向明细需清空后重新确认 */
+function handleCustomerChange() {
   if (products.value.length) {
     products.value = []
     proxy.$modal.msgWarning("已切换客户，原意向明细已清空，请重新添加渠道模型")
   }
-  models.value = []
-  supplierAccounts.value = []
-  loadCustomerData(value)
+}
+
+/** 重置弹窗级联选择状态 */
+function resetPick() {
+  pick.supplierId = null
+  pick.accountId = null
+  pick.productIds = []
+  pickAddedCount.value = 0
+}
+
+/** 切换渠道：账户回到该渠道默认账户，已选模型清空（模型范围随渠道变化） */
+function handlePickSupplierChange() {
+  pick.productIds = []
+  const account = defaultAccountOf(pick.supplierId)
+  pick.accountId = account ? account.id : null
 }
 
 function openModelDialog() {
@@ -496,40 +517,49 @@ function openModelDialog() {
     proxy.$modal.msgWarning("请先选择客户")
     return
   }
-  modelKeyword.value = ""
-  selectedModels.value = []
+  resetPick()
   modelDialogOpen.value = true
-  loadCustomerData(form.customerId).then(() => {
-    // 默认带出各渠道的可用账户，用户仍可逐行改选
-    Object.keys(modelAccountMap).forEach(key => delete modelAccountMap[key])
-    filteredModels.value.forEach(item => {
-      const account = defaultAccountOf(item.supplierId)
-      modelAccountMap[item.key] = account ? account.id : undefined
-    })
+  loadChannelData().then(() => {
+    // 默认定位到第一个可选渠道（有账户且仍有未添加模型），减少一次点击
+    const first = pickSupplierOptions.value.find(item => !item.disabled)
+    if (first) {
+      pick.supplierId = first.id
+      handlePickSupplierChange()
+    }
   })
 }
 
-function handleModelSelectionChange(selection) {
-  selectedModels.value = selection
-}
-
-/** 确认添加：渠道账户必填，折扣默认取渠道配置下限，未配置时取 1.00 */
+/** 确认添加：渠道、账户、模型均必填；折扣默认取渠道配置下限，未配置时取 1.00 */
 function confirmAddModels() {
-  if (!selectedModels.value.length) {
-    proxy.$modal.msgWarning("请选择要添加的模型")
+  if (isEmptyVal(pick.supplierId)) {
+    proxy.$modal.msgWarning("请选择渠道")
     return
   }
-  const missing = selectedModels.value.filter(model => isEmptyVal(modelAccountMap[model.key]))
-  if (missing.length) {
-    proxy.$modal.msgError(`请为「${missing[0].supplierName || missing[0].name}」选择渠道账户`)
+  if (isEmptyVal(pick.accountId)) {
+    proxy.$modal.msgError("请选择渠道账户")
     return
   }
-  selectedModels.value.forEach(model => {
-    const account = supplierAccounts.value.find(item => String(item.id) === String(modelAccountMap[model.key]))
+  if (!pick.productIds.length) {
+    proxy.$modal.msgWarning("请至少选择一个模型型号")
+    return
+  }
+  const account = supplierAccounts.value.find(item => String(item.id) === String(pick.accountId))
+  const added = []
+  pick.productIds.forEach(productId => {
+    const model = models.value.find(item =>
+      String(item.supplierId) === String(pick.supplierId) && String(item.id) === String(productId)
+    )
+    if (!model) {
+      return
+    }
+    const key = rowKey(model.supplierId, model.id)
+    if (products.value.some(row => rowKey(row.supplierId, row.productId) === key)) {
+      return
+    }
     products.value.push({
       supplierId: model.supplierId,
       supplierName: model.supplierName,
-      supplierAccountId: modelAccountMap[model.key],
+      supplierAccountId: account ? account.id : pick.accountId,
       supplierAccountName: account ? account.accountName : "",
       productId: model.id,
       productNo: model.no,
@@ -538,9 +568,23 @@ function confirmAddModels() {
       sellDiscount: isEmptyVal(model.minSellDiscount) ? 1 : Number(model.minSellDiscount),
       priceDetail: null
     })
+    added.push(model)
   })
-  modelDialogOpen.value = false
-  proxy.$modal.msgSuccess(`已添加 ${selectedModels.value.length} 个模型`)
+  if (!added.length) {
+    proxy.$modal.msgWarning("所选模型均已添加，请重新选择")
+    return
+  }
+  pickAddedCount.value += added.length
+  pick.productIds = []
+  // 当前渠道的模型已全部添加时自动跳到下一个可选渠道，避免停留在空下拉
+  if (!pickProductOptions.value.length) {
+    const next = pickSupplierOptions.value.find(item => !item.disabled)
+    if (next) {
+      pick.supplierId = next.id
+      handlePickSupplierChange()
+    }
+  }
+  proxy.$modal.msgSuccess(`已添加 ${added.length} 个模型`)
 }
 
 function handleRemoveProduct(index) {
@@ -707,7 +751,7 @@ function loadDetail(id) {
       sellDiscount: item.sellDiscount,
       priceDetail: item.priceDetail
     }))
-    return loadCustomerData(detail.customerId)
+    return loadChannelData()
   }).catch(() => {
     handleBack()
   }).finally(() => {
@@ -716,6 +760,7 @@ function loadDetail(id) {
 }
 
 loadCustomerOptions()
+loadChannelData()
 
 const routeId = route.query.id
 if (routeId) {
@@ -764,5 +809,14 @@ if (routeId) {
   justify-content: center;
   gap: 12px;
   padding: 8px 0 24px;
+}
+.dialog-footer--spread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dialog-footer--spread .field-tip {
+  text-align: left;
 }
 </style>

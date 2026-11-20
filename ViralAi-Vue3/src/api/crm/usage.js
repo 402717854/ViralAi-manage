@@ -43,10 +43,19 @@ export function getUsageBoard(billCycle) {
   })
 }
 
-// 渠道对账汇总
-export function getSupplierStat(billCycle) {
+// 用量趋势（近 N 期，默认 6 期；缺失账期后端已补 0）
+export function getUsageTrend(billCycle, months = 6) {
   return request({
-    url: '/crm/usage/supplier-stat',
+    url: '/crm/usage/board/trend',
+    method: 'get',
+    params: { billCycle, months }
+  })
+}
+
+// 客户 + 渠道对账汇总（旧地址 /crm/usage/supplier-stat 仍保留为别名）
+export function getCustomerSupplierStat(billCycle) {
+  return request({
+    url: '/crm/usage/customer-supplier-stat',
     method: 'get',
     params: { billCycle }
   })

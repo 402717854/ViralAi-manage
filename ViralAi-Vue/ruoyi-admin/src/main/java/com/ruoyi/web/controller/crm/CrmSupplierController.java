@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.ruoyi.common.annotation.Log;
 import com.ruoyi.common.core.controller.BaseController;
@@ -76,6 +77,43 @@ public class CrmSupplierController extends BaseController
     }
 
     /**
+     * 查询渠道可售模型选项（启用渠道 × 渠道已上架模型）
+     * <p>
+     * 商机与合同明细选择模型的唯一数据源：客户不再维护关联渠道，
+     * 可用范围由渠道上架关系决定，每行带所属渠道供前端按渠道分组。
+     */
+    @GetMapping("/channel-product-options")
+    public AjaxResult channelProductOptions()
+    {
+        return success(crmSupplierService.selectChannelProductOptions());
+    }
+
+    /**
+     * 查询渠道账户选项（全部启用渠道下的账户）
+     * <p>
+     * 商机与合同明细选择「渠道账户」的下拉数据源，只返回账户名、所属渠道、状态与类型，
+     * 不返回 apiKey 与密码。
+     */
+    @GetMapping("/channel-account-options")
+    public AjaxResult channelAccountOptions()
+    {
+        return success(crmSupplierService.selectChannelAccountOptions());
+    }
+
+    /**
+     * 按模型ID查询报过价的渠道（含渠道名称与折扣区间）
+     * <p>
+     * 供应商报价明细选中模型型号后，前端按 project_id 懒加载该模型的所属渠道并带出折扣；
+     * 返回空集合表示该模型还没有任何渠道报价，前端按「所属渠道 = 当前供应商」处理。
+     * 仅要求登录，不校验功能权限，保证只有 add / edit 权限的用户也能级联。
+     */
+    @GetMapping("/project-channels")
+    public AjaxResult projectChannels(@RequestParam("projectId") Long projectId)
+    {
+        return success(crmSupplierService.selectChannelListByProjectId(projectId));
+    }
+
+    /**
      * 获取CRM 供应商详细信息
      */
     @PreAuthorize("@ss.hasPermi('crm:supplier:query')")
@@ -88,11 +126,14 @@ public class CrmSupplierController extends BaseController
     /**
      * 按供应商ID查询其产品关联明细
      * <p>
-     * 返回该供应商关联的每个模型：projectId（模型ID）、projectNo（模型型号）、
-     * projectName（模型厂商），以及成本/售价/代理三档折扣区间与预计日消耗金额。
+     * 返回该供应商报价单中的每个模型：projectSupplierId / projectSupplierName（模型所属供应商）、
+     * projectId（模型ID）、projectNo（模型型号）、projectName（模型厂商），以及成本与售价折扣区间。
      * 模型已被删除时仍返回关联行，projectNo / projectName 为 null。
+     * <p>
+     * 该接口同时作为新增/修改弹窗内「模型所属供应商 → 模型型号」下拉的数据源，
+     * 因此对 add / edit 权限开放，否则仅有新增权限的用户选不到模型。
      */
-    @PreAuthorize("@ss.hasPermi('crm:supplier:query')")
+    @PreAuthorize("@ss.hasAnyPermi('crm:supplier:query,crm:supplier:add,crm:supplier:edit')")
     @GetMapping(value = "/{id}/projects")
     public AjaxResult getProjects(@PathVariable("id") Long id)
     {

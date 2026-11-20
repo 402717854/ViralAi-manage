@@ -21,6 +21,12 @@ server:
   servlet:
     # 应用的访问路径
     context-path: /
+  # 响应压缩：账单详情、用量台账等 JSON 接口体积可达数百 KB，开启后传输量可减少 60% 以上
+  # mime-types 沿用框架默认值（已包含 application/json、application/javascript 等），无需重复声明；
+  # min-response-size 默认 2KB，小响应不压缩以免徒增 CPU；
+  # Excel 导出的 content-type 不在压缩列表内，不会被压缩
+  compression:
+    enabled: true
   tomcat:
     # tomcat的URI编码
     uri-encoding: UTF-8

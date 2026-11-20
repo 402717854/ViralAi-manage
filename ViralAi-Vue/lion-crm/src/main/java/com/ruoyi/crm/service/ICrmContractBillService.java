@@ -6,9 +6,11 @@ import com.ruoyi.crm.dto.CrmBillAuditVo;
 import com.ruoyi.crm.dto.CrmBillDiffHandleVo;
 import com.ruoyi.crm.dto.CrmBillGenerateResultVo;
 import com.ruoyi.crm.dto.CrmBillGenerateVo;
+import com.ruoyi.crm.dto.CrmBillUsageItemDto;
 import com.ruoyi.crm.dto.CrmContractBillDetailVo;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
 import com.ruoyi.crm.dto.CrmContractBillDto;
+import com.ruoyi.crm.dto.CrmContractBillSubDto;
 
 /**
  * 对账账单Service接口
@@ -27,12 +29,41 @@ public interface ICrmContractBillService
     public List<CrmContractBillDto> selectCrmContractBillList(CrmContractBillDto query);
 
     /**
-     * 查询账单详情：账单 + 归属用量 + 同渠道同账期差异
+     * 查询子账单列表（内部应用渠道数据权限）
+     *
+     * <p>子账单按「父账单 + 自然日」拆分，供「子账单明细」二级页面使用；
+     * 分页由调用方 {@code startPage()} 控制。</p>
+     *
+     * @param query 查询条件
+     * @return 子账单列表
+     */
+    public List<CrmContractBillSubDto> selectCrmContractBillSubList(CrmContractBillSubDto query);
+
+    /**
+     * 查询账单详情：账单 + 差异 + 用量条数（用量明细另走分页接口）
      *
      * @param id 账单ID
      * @return 详情
      */
     public CrmContractBillDetailVo selectCrmContractBillDetail(Long id);
+
+    /**
+     * 校验账单存在且在当前账号的渠道数据权限内
+     *
+     * <p>供分页接口在 {@code startPage()} 之前完成校验——分页插件作用于
+     * 第一条 SQL，校验语句必须先执行完毕。</p>
+     *
+     * @param id 账单ID
+     */
+    public void assertBillAccessible(Long id);
+
+    /**
+     * 查询账单归属的用量明细（分页由调用方 {@code startPage()} 控制）
+     *
+     * @param id 账单ID
+     * @return 用量明细行
+     */
+    public List<CrmBillUsageItemDto> selectBillUsagePage(Long id);
 
     /**
      * 生成账单（按渠道 + 账期，合同维度分组）

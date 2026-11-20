@@ -103,7 +103,7 @@
             <span class="hint">
               {{ productsOnly
                 ? "已签约合同可增删模型、调整折扣与价格明细，保存后立即生效并记入操作日志"
-                : "仅可选择客户已关联渠道下的模型，同一渠道下同一模型不可重复添加" }}
+                : "仅可选择渠道已上架模型，保存时校验渠道、账户与模型归属一致；同一渠道下同一模型不可重复添加" }}
             </span>
             <el-button type="primary" plain icon="Plus" :disabled="!form.consumerId" @click="openAddProduct">
               添加渠道模型
@@ -207,7 +207,7 @@
         <el-form-item label="渠道" prop="supplierId">
           <el-select
             v-model="addForm.supplierId"
-            placeholder="请选择客户已关联的渠道"
+            placeholder="请选择渠道"
             filterable
             style="width: 100%"
             @change="handleAddSupplierChange"
@@ -314,7 +314,7 @@
 <script setup name="ContractEdit">
 import { getContract, initContract, saveContract, submitAudit, batchSaveContractProduct } from "@/api/crm/contract"
 import { listBusiness } from "@/api/crm/business"
-import { getCustomerProductOptions, getCustomerSupplierAccounts } from "@/api/crm/customer"
+import { getChannelProductOptions, getChannelAccountOptions } from "@/api/crm/supplier"
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
@@ -334,9 +334,9 @@ const productsOnly = ref(false)
 const busLocked = ref(false)
 const busOptions = ref([])
 const busLoading = ref(false)
-/** 客户已关联渠道下的可用模型（渠道-模型组合），渠道由明细行承载 */
+/** 渠道可售模型（渠道-模型组合），可选范围由渠道上架关系决定，与客户无关 */
 const channelProducts = ref([])
-/** 客户可用渠道下的账户（渠道-账户组合），明细行需指定账户 */
+/** 渠道账户（渠道-账户组合），明细行需指定账户 */
 const supplierAccounts = ref([])
 
 const form = ref({
@@ -427,7 +427,7 @@ function handleBusChange(busId) {
       form.value.contractName = data.suggestedContractName
     }
     busLocked.value = true
-    loadCustomerData()
+    loadChannelData()
   })
 }
 
@@ -436,20 +436,15 @@ function rowKey(supplierId, productId) {
   return `${supplierId}:${productId}`
 }
 
-/** 加载客户已关联渠道下的可用模型与渠道账户（与商机明细同一数据源） */
-function loadCustomerData() {
-  if (!form.value.consumerId) {
-    channelProducts.value = []
-    supplierAccounts.value = []
-    return
-  }
+/** 加载渠道可售模型与渠道账户（与商机明细同一数据源） */
+function loadChannelData() {
   Promise.all([
-    getCustomerProductOptions(form.value.consumerId).then(res => {
+    getChannelProductOptions().then(res => {
       channelProducts.value = res.data || []
     }).catch(() => {
       channelProducts.value = []
     }),
-    getCustomerSupplierAccounts(form.value.consumerId).then(res => {
+    getChannelAccountOptions().then(res => {
       supplierAccounts.value = res.data || []
     }).catch(() => {
       supplierAccounts.value = []
@@ -595,13 +590,13 @@ function openAddProduct() {
     return
   }
   if (!channelOptions.value.length) {
-    proxy.$modal.msgWarning("该客户尚未关联渠道，请先在客户资料中维护渠道")
+    proxy.$modal.msgWarning("暂无可用的渠道模型，请先在「渠道管理」中维护渠道并上架模型")
     return
   }
   const defaultSupplierId = channelOptions.value[0].supplierId
   const account = defaultAccountOf(defaultSupplierId)
   if (!account) {
-    proxy.$modal.msgWarning("该客户的渠道下还没有可用账户，请先在「渠道账户管理」中维护账户")
+    proxy.$modal.msgWarning("所选渠道下暂无可用账户，请先在「渠道账户管理」中维护账户")
     return
   }
   addForm.value = {
@@ -868,7 +863,7 @@ function applyDetail(data) {
     sellDiscount: item.sellDiscount,
     priceDetail: item.priceDetail || ""
   }))
-  loadCustomerData()
+  loadChannelData()
 }
 
 function handleBack() {

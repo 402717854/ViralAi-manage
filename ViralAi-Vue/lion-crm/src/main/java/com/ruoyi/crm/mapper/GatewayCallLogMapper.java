@@ -46,11 +46,13 @@ public interface GatewayCallLogMapper
      * @param startTime 起始（按调用时间）
      * @param endTime 结束
      * @param supplierId 渠道ID，可为空
+     * @param customerId 客户ID，可为空
      * @return 流水列表
      */
     public List<GatewayCallLog> selectReconcileCallLogs(@Param("startTime") Date startTime,
                                                        @Param("endTime") Date endTime,
-                                                       @Param("supplierId") Long supplierId);
+                                                       @Param("supplierId") Long supplierId,
+                                                       @Param("customerId") Long customerId);
 
     /**
      * 按流水号统计（幂等预检，可不查库直接依赖唯一索引）

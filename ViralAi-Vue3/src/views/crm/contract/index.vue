@@ -292,6 +292,12 @@ const queryParams = ref({
   statusList: []
 })
 
+/** 首页待办下钻：URL 携带 statusList（单值）时预置状态筛选，0=草稿同样需要生效 */
+const initStatus = proxy.$route.query.statusList
+if (initStatus !== undefined && initStatus !== null && initStatus !== "") {
+  queryParams.value.statusList = [Number(initStatus)]
+}
+
 /** 状态常量，与后端 ContractStatusEnum 保持一致 */
 const STATUS = {
   DRAFT: 0,

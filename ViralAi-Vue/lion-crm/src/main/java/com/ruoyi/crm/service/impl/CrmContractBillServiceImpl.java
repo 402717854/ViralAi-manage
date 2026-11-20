@@ -1,6 +1,7 @@
 package com.ruoyi.crm.service.impl;
 
 import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -16,21 +17,26 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.crm.domain.CrmContract;
 import com.ruoyi.crm.domain.CrmContractBill;
 import com.ruoyi.crm.domain.CrmContractBillDiff;
+import com.ruoyi.crm.domain.CrmContractBillSub;
 import com.ruoyi.crm.domain.CrmContractUsage;
 import com.ruoyi.crm.dto.CrmBillAuditVo;
+import com.ruoyi.crm.dto.CrmBillDailyGroupDto;
 import com.ruoyi.crm.dto.CrmBillDiffHandleVo;
 import com.ruoyi.crm.dto.CrmBillGenerateResultVo;
 import com.ruoyi.crm.dto.CrmBillGenerateVo;
 import com.ruoyi.crm.dto.CrmBillGroupDto;
+import com.ruoyi.crm.dto.CrmBillUsageItemDto;
 import com.ruoyi.crm.dto.CrmContractBillDetailVo;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
 import com.ruoyi.crm.dto.CrmContractBillDto;
+import com.ruoyi.crm.dto.CrmContractBillSubDto;
 import com.ruoyi.crm.enums.BillDiffHandleStatusEnum;
 import com.ruoyi.crm.enums.ContractBillStatusEnum;
 import com.ruoyi.crm.enums.UsageMatchStatusEnum;
 import com.ruoyi.crm.mapper.CrmBusinessMapper;
 import com.ruoyi.crm.mapper.CrmContractBillDiffMapper;
 import com.ruoyi.crm.mapper.CrmContractBillMapper;
+import com.ruoyi.crm.mapper.CrmContractBillSubMapper;
 import com.ruoyi.crm.mapper.CrmContractMapper;
 import com.ruoyi.crm.mapper.CrmContractUsageMapper;
 import com.ruoyi.crm.service.ICrmContractBillService;
@@ -66,6 +72,9 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
     private CrmContractBillDiffMapper crmContractBillDiffMapper;
 
     @Autowired
+    private CrmContractBillSubMapper crmContractBillSubMapper;
+
+    @Autowired
     private CrmContractMapper crmContractMapper;
 
     @Autowired
@@ -85,6 +94,14 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
     }
 
     @Override
+    public List<CrmContractBillSubDto> selectCrmContractBillSubList(CrmContractBillSubDto query)
+    {
+        // 子账单与父账单共用同一套渠道数据权限，避免从二级页面绕过账单的可见范围
+        crmFinanceDataScope.applyScope(query);
+        return crmContractBillSubMapper.selectCrmContractBillSubList(query);
+    }
+
+    @Override
     public CrmContractBillDetailVo selectCrmContractBillDetail(Long id)
     {
         CrmContractBillDto bill = crmContractBillMapper.selectCrmContractBillDetail(id);
@@ -96,7 +113,8 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
 
         CrmContractBillDetailVo detail = new CrmContractBillDetailVo();
         detail.setBill(bill);
-        detail.setUsages(crmContractUsageMapper.selectUsageByBillId(id));
+        // 只取条数，明细由 selectBillUsagePage 分页拉取，避免一次返回整月流水
+        detail.setUsageCount(crmContractUsageMapper.countUsageByBillId(id));
 
         CrmContractBillDiffDto diffQuery = new CrmContractBillDiffDto();
         diffQuery.setSupplierId(bill.getSupplierId());
@@ -115,6 +133,27 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
         }
         detail.setPendingDiffCount(pending);
         return detail;
+    }
+
+    @Override
+    public void assertBillAccessible(Long id)
+    {
+        if (id == null)
+        {
+            throw new ServiceException("账单ID不能为空");
+        }
+        CrmContractBill bill = crmContractBillMapper.selectCrmContractBillById(id);
+        if (bill == null)
+        {
+            throw new ServiceException("账单不存在");
+        }
+        crmFinanceDataScope.assertSupplierAccessible(bill.getSupplierId());
+    }
+
+    @Override
+    public List<CrmBillUsageItemDto> selectBillUsagePage(Long id)
+    {
+        return crmContractUsageMapper.selectUsageItemByBillId(id);
     }
 
     @Override
@@ -325,6 +364,9 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
                 continue;
             }
 
+            // 按自然日拆分子账单：统计口径是「本张账单已归集的用量」，与父账单金额同源
+            writeDailySubBills(bill, creator);
+
             result.setBillCount(result.getBillCount() + 1);
             result.setUsageCount(result.getUsageCount() + usageCount);
             result.setTotalSellAmount(result.getTotalSellAmount().add(bill.getTotalSellAmount()));
@@ -333,6 +375,81 @@ public class CrmContractBillServiceImpl implements ICrmContractBillService
             result.getBills().add(crmContractBillMapper.selectCrmContractBillDetail(bill.getId()));
         }
         return result;
+    }
+
+    /**
+     * 按自然日拆分本张账单的子账单
+     *
+     * <p>统计口径为 {@code crm_contract_usage.bill_id = 父账单ID}，与父账单金额同源：
+     * 父账单的汇总来自「未入账用量」，回填 {@code bill_id} 后这批用量已固定，
+     * 逐日求和必然等于父账单金额。若不等，说明归集期间台账被并发修改，
+     * 直接抛错回滚整批账单——财务场景宁可生成失败，也不能留下父子金额不一致的账。</p>
+     *
+     * <p>无匹配成功用量的日期不产生子账单，与「不生成 0 金额账单」的既有口径一致。</p>
+     *
+     * @param bill 已落库的父账单
+     * @param creator 创建人
+     */
+    private void writeDailySubBills(CrmContractBill bill, Long creator)
+    {
+        List<CrmBillDailyGroupDto> days = crmContractUsageMapper.selectDailyGroupsByBillId(bill.getId());
+        if (days.isEmpty())
+        {
+            throw new ServiceException("账单 " + bill.getBillNo() + " 未归集到任何用量，无法生成按天子账单");
+        }
+
+        SimpleDateFormat dayFormat = new SimpleDateFormat("yyyyMMdd");
+        Date now = new Date();
+        List<CrmContractBillSub> subBills = new ArrayList<>(days.size());
+        long tokenSum = 0L;
+        BigDecimal sellSum = BigDecimal.ZERO;
+        BigDecimal costSum = BigDecimal.ZERO;
+        BigDecimal profitSum = BigDecimal.ZERO;
+
+        for (CrmBillDailyGroupDto day : days)
+        {
+            CrmContractBillSub sub = new CrmContractBillSub();
+            // 子账单编号由父账单号派生，父账单号唯一即可保证子账单号唯一，无需再占用序列
+            sub.setSubBillNo(bill.getBillNo() + "-D" + dayFormat.format(day.getBillDate()));
+            sub.setBillId(bill.getId());
+            sub.setBillNo(bill.getBillNo());
+            sub.setBillCycle(bill.getBillCycle());
+            sub.setBillDate(day.getBillDate());
+            sub.setContractId(bill.getContractId());
+            sub.setCustomerId(bill.getCustomerId());
+            sub.setSupplierId(bill.getSupplierId());
+            // 父账单当前固定写 0，且实体未回填，这里必须兜底，避免 not null 列插入失败
+            sub.setSupplierAccountId(bill.getSupplierAccountId() == null ? 0L : bill.getSupplierAccountId());
+            sub.setUsageCount(day.getUsageCount() == null ? 0 : day.getUsageCount());
+            sub.setTotalTokens(day.getTotalTokens() == null ? 0L : day.getTotalTokens());
+            sub.setTotalSellAmount(nullToZero(day.getTotalSellAmount()));
+            sub.setTotalCostAmount(nullToZero(day.getTotalCostAmount()));
+            sub.setTotalGrossProfit(nullToZero(day.getTotalGrossProfit()));
+            sub.setCreator(creator);
+            sub.setCreateTime(now);
+            subBills.add(sub);
+
+            tokenSum += sub.getTotalTokens();
+            sellSum = sellSum.add(sub.getTotalSellAmount());
+            costSum = costSum.add(sub.getTotalCostAmount());
+            profitSum = profitSum.add(sub.getTotalGrossProfit());
+        }
+
+        long billTokens = bill.getTotalTokens() == null ? 0L : bill.getTotalTokens();
+        BigDecimal billSell = nullToZero(bill.getTotalSellAmount());
+        BigDecimal billCost = nullToZero(bill.getTotalCostAmount());
+        BigDecimal billProfit = nullToZero(bill.getTotalGrossProfit());
+        if (tokenSum != billTokens
+                || sellSum.compareTo(billSell) != 0
+                || costSum.compareTo(billCost) != 0
+                || profitSum.compareTo(billProfit) != 0)
+        {
+            throw new ServiceException("账单 " + bill.getBillNo() + " 按天拆分后与账单汇总不一致：token "
+                    + tokenSum + " / " + billTokens + "，应收 " + sellSum + " / " + billSell
+                    + "，成本 " + costSum + " / " + billCost + "，毛利 " + profitSum + " / " + billProfit);
+        }
+
+        crmContractBillSubMapper.batchInsertCrmContractBillSub(subBills);
     }
 
     /**

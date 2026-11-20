@@ -9,6 +9,8 @@ import lombok.Setter;
 /**
  * 渠道对账看板数据
  *
+ * <p>概览卡片为账期全量合计；明细区以「客户 + 渠道」为统计基准，另附渠道成本排行。</p>
+ *
  * @author ruoyi
  * @date 2026-11-04
  */
@@ -49,9 +51,9 @@ public class CrmUsageBoardVo
     /** 概览：待处理差异数 */
     private Integer pendingDiffCount;
 
-    /** 渠道维度统计 */
-    private List<CrmSupplierStatVo> supplierStats;
+    /** 客户 + 渠道维度汇总（按客户与渠道组合聚合） */
+    private List<CrmCustomerSupplierStatVo> customerSupplierStats;
 
-    /** 合同维度排行（按 token 倒序，取前 10） */
-    private List<CrmContractRankVo> contractRank;
+    /** 渠道成本排行（按渠道成本倒序，取前 10） */
+    private List<CrmSupplierCostRankVo> supplierCostRank;
 }

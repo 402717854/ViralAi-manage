@@ -165,10 +165,13 @@ delimiter ;
 
 call crm_add_column_if_missing('crm_model_product', 'product_code',
   '`product_code` varchar(64) default null comment ''模型编码（对账匹配键，网关 product_code 需与之对应），为空时回退 no'' after `no`');
-call crm_add_column_if_missing('crm_model_product', 'base_sell_price',
-  '`base_sell_price` decimal(16,6) default null comment ''基准售价（每千token）'' after `price_detail`');
-call crm_add_column_if_missing('crm_model_product', 'base_cost_price',
-  '`base_cost_price` decimal(16,6) default null comment ''基准成本价（每千token）'' after `base_sell_price`');
+-- 【已废弃】模型基准价两列已于后续版本下线（计费改为按上游费用 × 合同折扣，基准价不参与计算）。
+--   下方两行保留为历史记录并注释，避免新环境重新建列；
+--   已建列的环境请执行 crm_remove_model_product_base_price.sql 删除。
+-- call crm_add_column_if_missing('crm_model_product', 'base_sell_price',
+--   '`base_sell_price` decimal(16,6) default null comment ''基准售价（每千token）'' after `price_detail`');
+-- call crm_add_column_if_missing('crm_model_product', 'base_cost_price',
+--   '`base_cost_price` decimal(16,6) default null comment ''基准成本价（每千token）'' after `base_sell_price`');
 
 -- 消耗费用：网关上报的实际计费金额；台账侧冗余一份快照，列表与详情可直接展示
 call crm_add_column_if_missing('gateway_call_log', 'total_fees',

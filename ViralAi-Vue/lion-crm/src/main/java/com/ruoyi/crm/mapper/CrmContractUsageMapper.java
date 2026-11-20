@@ -8,12 +8,15 @@ import org.apache.ibatis.annotations.Param;
 import com.ruoyi.crm.domain.CrmContract;
 import com.ruoyi.crm.domain.CrmContractUsage;
 import com.ruoyi.crm.domain.CrmModelProduct;
+import com.ruoyi.crm.dto.CrmBillDailyGroupDto;
 import com.ruoyi.crm.dto.CrmBillGroupDto;
-import com.ruoyi.crm.dto.CrmContractRankVo;
+import com.ruoyi.crm.dto.CrmBillUsageItemDto;
 import com.ruoyi.crm.dto.CrmContractUsageDto;
+import com.ruoyi.crm.dto.CrmCustomerSupplierStatVo;
 import com.ruoyi.crm.dto.CrmMatchProductDto;
-import com.ruoyi.crm.dto.CrmSupplierStatVo;
+import com.ruoyi.crm.dto.CrmSupplierCostRankVo;
 import com.ruoyi.crm.dto.CrmUsageBoardVo;
+import com.ruoyi.crm.dto.CrmUsageTrendVo;
 
 /**
  * 合同用量对账台账Mapper接口
@@ -72,6 +75,7 @@ public interface CrmContractUsageMapper
      * @param startTime 调用时间起始
      * @param endTime 调用时间结束
      * @param supplierId 渠道ID，可为空
+     * @param customerId 客户ID，可为空
      * @param matchStatuses 需要重试的匹配状态集合
      * @param scopeSupplierIds 数据权限渠道集合，可为空
      * @return 台账列表
@@ -79,6 +83,7 @@ public interface CrmContractUsageMapper
     public List<CrmContractUsage> selectRematchUsages(@Param("startTime") Date startTime,
                                                       @Param("endTime") Date endTime,
                                                       @Param("supplierId") Long supplierId,
+                                                      @Param("customerId") Long customerId,
                                                       @Param("matchStatuses") List<Integer> matchStatuses,
                                                       @Param("scopeSupplierIds") List<Long> scopeSupplierIds);
 
@@ -114,14 +119,12 @@ public interface CrmContractUsageMapper
      * @param supplierId 渠道ID
      * @param supplierAccountId 渠道账户ID，为空或 0 表示不过滤账户
      * @param productId 模型ID
-     * @param callTime 调用时间
      * @return 候选明细列表
      */
     public List<CrmMatchProductDto> selectMatchContractProducts(@Param("customerId") Long customerId,
                                                                 @Param("supplierId") Long supplierId,
                                                                 @Param("supplierAccountId") Long supplierAccountId,
-                                                                @Param("productId") Long productId,
-                                                                @Param("callTime") Date callTime);
+                                                                @Param("productId") Long productId);
 
     /**
      * 按模型编码查询模型产品（含基准价）
@@ -160,27 +163,53 @@ public interface CrmContractUsageMapper
                                       @Param("endTime") Date endTime);
 
     /**
-     * 查询账单归属的用量明细
+     * 查询账单归属的用量明细（详情抽屉分页用）
+     *
+     * <p>只取页面展示字段且不 join 维表，调用方需配合 {@code startPage()} 分页；
+     * 账单可能归集整月流水，禁止无分页地全量拉取。</p>
      *
      * @param billId 账单ID
-     * @return 用量明细
+     * @return 用量明细行
      */
-    public List<CrmContractUsageDto> selectUsageByBillId(@Param("billId") Long billId);
+    public List<CrmBillUsageItemDto> selectUsageItemByBillId(@Param("billId") Long billId);
 
     /**
-     * 渠道维度统计（仅统计匹配成功的用量）
+     * 统计账单归属的用量明细条数
+     *
+     * @param billId 账单ID
+     * @return 条数
+     */
+    public int countUsageByBillId(@Param("billId") Long billId);
+
+    /**
+     * 按账单归属日期（{@code date(call_time)}）聚合用量，用于生成按天子账单
+     *
+     * <p>统计对象是本张账单已归集的用量（{@code bill_id = ?}），而不是时间区间：
+     * 时间区间会把账单生成瞬间之后新增的用量也算进来，导致父子账单金额不一致。</p>
+     *
+     * @param billId 父账单ID
+     * @return 按天聚合结果，按日期升序
+     */
+    public List<CrmBillDailyGroupDto> selectDailyGroupsByBillId(@Param("billId") Long billId);
+
+    /**
+     * 客户 + 渠道维度统计（金额只统计匹配成功的用量，调用数含异常）
+     *
+     * <p>按 {@code customer_id + supplier_id} 组合聚合，用于定位「某客户在某渠道」的应收、成本与毛利。</p>
      *
      * @param startTime 周期起始
      * @param endTime 周期结束
      * @param supplierIds 数据权限渠道集合，为空表示不限
-     * @return 渠道统计
+     * @return 客户渠道统计
      */
-    public List<CrmSupplierStatVo> selectSupplierStat(@Param("startTime") Date startTime,
-                                                      @Param("endTime") Date endTime,
-                                                      @Param("supplierIds") List<Long> supplierIds);
+    public List<CrmCustomerSupplierStatVo> selectCustomerSupplierStat(@Param("startTime") Date startTime,
+                                                                      @Param("endTime") Date endTime,
+                                                                      @Param("supplierIds") List<Long> supplierIds);
 
     /**
-     * 合同维度排行
+     * 渠道成本排行
+     *
+     * <p>按渠道聚合成本并倒序取前 N 条，成本为 0 的渠道会被过滤，避免空行占位。</p>
      *
      * @param startTime 周期起始
      * @param endTime 周期结束
@@ -188,10 +217,10 @@ public interface CrmContractUsageMapper
      * @param limit 取前 N 条
      * @return 排行
      */
-    public List<CrmContractRankVo> selectContractRank(@Param("startTime") Date startTime,
-                                                      @Param("endTime") Date endTime,
-                                                      @Param("supplierIds") List<Long> supplierIds,
-                                                      @Param("limit") Integer limit);
+    public List<CrmSupplierCostRankVo> selectSupplierCostRank(@Param("startTime") Date startTime,
+                                                             @Param("endTime") Date endTime,
+                                                             @Param("supplierIds") List<Long> supplierIds,
+                                                             @Param("limit") Integer limit);
 
     /**
      * 看板概览
@@ -204,6 +233,20 @@ public interface CrmContractUsageMapper
     public CrmUsageBoardVo selectBoardSummary(@Param("startTime") Date startTime,
                                               @Param("endTime") Date endTime,
                                               @Param("supplierIds") List<Long> supplierIds);
+
+    /**
+     * 用量趋势：按账期聚合（单条 SQL 覆盖多期，避免逐期调用概览）
+     *
+     * <p>只返回有数据的账期，缺月由 Service 层补零填充，保证横轴连续。</p>
+     *
+     * @param startTime 起始（首期账期的 1 日 00:00:00）
+     * @param endTime 结束（末期账期的月末最后一秒）
+     * @param supplierIds 数据权限渠道集合，为空表示不限
+     * @return 按账期升序的趋势
+     */
+    public List<CrmUsageTrendVo> selectUsageTrend(@Param("startTime") Date startTime,
+                                                  @Param("endTime") Date endTime,
+                                                  @Param("supplierIds") List<Long> supplierIds);
 
     /**
      * 查询在用量的渠道ID集合（月账单生成时遍历）

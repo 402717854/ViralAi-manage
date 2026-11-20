@@ -22,14 +22,14 @@ import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.crm.domain.CrmBusiness;
 import com.ruoyi.crm.domain.CrmBusinessProduct;
 import com.ruoyi.crm.dto.CrmBusinessProductDto;
-import com.ruoyi.crm.dto.CrmCustomerProductDto;
+import com.ruoyi.crm.dto.CrmChannelProductDto;
 import com.ruoyi.crm.dto.CrmSupplierAccountDto;
 import com.ruoyi.crm.enums.BusStatusEnum;
 import com.ruoyi.crm.enums.BusinessActionEnum;
 import com.ruoyi.crm.mapper.CrmBusinessMapper;
 import com.ruoyi.crm.mapper.CrmBusinessProductMapper;
-import com.ruoyi.crm.mapper.CrmCustomerSupplierMapper;
 import com.ruoyi.crm.mapper.CrmSupplierAccountMapper;
+import com.ruoyi.crm.mapper.CrmSupplierMapper;
 import com.ruoyi.crm.service.ICrmBusinessProductService;
 import com.ruoyi.crm.service.support.CrmBusinessDataScope;
 import com.ruoyi.crm.service.support.CrmBusinessLogRecorder;
@@ -40,7 +40,7 @@ import com.ruoyi.crm.service.support.CrmBusinessLogRecorder;
  * <p>核心校验（前端绕过也无法写入脏数据）：</p>
  * <ol>
  *   <li>商机必须存在且处于【初始化】【跟进中】（状态 &gt;= 2 后产品清单锁定）；</li>
- *   <li>每行的「渠道 + 模型」必须命中该客户已开通渠道及其上架模型（crm_customer_supplier × crm_supplier_project）；</li>
+ *   <li>每行的「渠道 + 模型」必须命中启用渠道及其已上架模型（crm_supplier × crm_supplier_project）；</li>
  *   <li>每行必须指定渠道账户（crm_supplier_account.id），且账户须属于该行所选渠道；</li>
  *   <li>同一商机内「渠道 + 模型」不可重复（同一模型可在不同渠道各出现一次）；</li>
  *   <li>成本折扣、售卖折扣取值范围 0.01 ~ 1.00，统一保留两位小数；</li>
@@ -71,7 +71,7 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
     private CrmBusinessProductMapper crmBusinessProductMapper;
 
     @Autowired
-    private CrmCustomerSupplierMapper crmCustomerSupplierMapper;
+    private CrmSupplierMapper crmSupplierMapper;
 
     @Autowired
     private CrmSupplierAccountMapper crmSupplierAccountMapper;
@@ -107,7 +107,7 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
 
         Long userId = SecurityUtils.getUserId();
         Date now = DateUtils.getNowDate();
-        List<CrmBusinessProduct> entities = buildEntities(busId, customerId, list, userId, now);
+        List<CrmBusinessProduct> entities = buildEntities(busId, list, userId, now);
 
         // 全量替换：先清空再写入，保证清单与提交内容一致
         crmBusinessProductMapper.deleteBusinessProductByBusId(busId);
@@ -178,18 +178,17 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
     /**
      * 构建并校验产品实体
      * <p>
-     * 渠道由明细行承载：每行必须显式指定 supplierId，且「渠道 + 模型」必须命中
-     * 客户已开通渠道及该渠道已上架的模型（crm_customer_supplier × crm_supplier_project）；
-     * 同时每行必须指定该渠道下的账户（supplierAccountId），用于用量归属与密钥管理。
+     * 渠道模型关系由本模块的明细行维护：每行必须显式指定 supplierId、productId 与
+     * supplierAccountId，且「渠道 + 模型」必须命中启用渠道及其已上架模型
+     * （crm_supplier × crm_supplier_project），账户必须属于该行所选渠道。
      *
      * @param busId 商机ID
-     * @param customerId 客户ID
      * @param list 入参清单
      * @param userId 操作人
      * @param now 当前时间
      * @return 实体集合
      */
-    private List<CrmBusinessProduct> buildEntities(Long busId, Long customerId, List<CrmBusinessProductDto> list,
+    private List<CrmBusinessProduct> buildEntities(Long busId, List<CrmBusinessProductDto> list,
                                                    Long userId, Date now)
     {
         List<CrmBusinessProduct> entities = new ArrayList<>();
@@ -198,9 +197,9 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
             return entities;
         }
 
-        // 客户可用模型：客户关联渠道 × 渠道已上架模型，键为「渠道ID:模型ID」
+        // 可售模型：启用渠道 × 渠道已上架模型，键为「渠道ID:模型ID」
         Set<String> availableKeys = new HashSet<>();
-        for (CrmCustomerProductDto product : crmCustomerSupplierMapper.selectProductsByCustomerId(customerId))
+        for (CrmChannelProductDto product : crmSupplierMapper.selectChannelProductOptions())
         {
             if (product.getId() != null && product.getSupplierId() != null)
             {
@@ -209,12 +208,12 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
         }
         if (availableKeys.isEmpty())
         {
-            throw new ServiceException("该客户未开通任何渠道，或已开通渠道下没有可用模型，无法添加意向产品");
+            throw new ServiceException("系统内暂无可用渠道模型（渠道需启用且已上架有效模型），无法添加意向产品");
         }
 
-        // 客户可用渠道账户：账户必须存在且属于该行选定的渠道
+        // 渠道账户：账户必须存在且属于该行选定的渠道
         Map<Long, CrmSupplierAccountDto> accountMap = new HashMap<>();
-        for (CrmSupplierAccountDto account : crmSupplierAccountMapper.selectAccountOptionsByCustomerId(customerId))
+        for (CrmSupplierAccountDto account : crmSupplierAccountMapper.selectChannelAccountOptions())
         {
             if (account.getId() != null && account.getSupplierId() != null)
             {
@@ -223,7 +222,7 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
         }
         if (accountMap.isEmpty())
         {
-            throw new ServiceException("该客户的已开通渠道下没有可用账户，请先在「渠道账户管理」中维护账户");
+            throw new ServiceException("系统内暂无可用渠道账户，请先在「渠道账户管理」中维护账户");
         }
 
         Set<String> seenKeys = new HashSet<>();
@@ -247,7 +246,7 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
             if (account == null)
             {
                 throw new ServiceException(StringUtils.format(
-                        "第 {} 行渠道账户不存在或不属于该客户的已开通渠道", rowNo));
+                        "第 {} 行渠道账户不存在或所属渠道已停用", rowNo));
             }
             if (!account.getSupplierId().equals(dto.getSupplierId()))
             {
@@ -257,7 +256,7 @@ public class CrmBusinessProductServiceImpl implements ICrmBusinessProductService
             if (!availableKeys.contains(key))
             {
                 throw new ServiceException(StringUtils.format(
-                        "第 {} 行模型不在该客户的可用渠道内（渠道需已开通且模型需已上架），禁止添加", rowNo));
+                        "第 {} 行渠道未启用或该模型未在渠道上架，禁止添加", rowNo));
             }
             if (!seenKeys.add(key))
             {

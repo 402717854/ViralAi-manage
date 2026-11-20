@@ -22,15 +22,14 @@ public interface CrmSupplierAccountMapper
     public List<CrmSupplierAccountDto> selectCrmSupplierAccountList(CrmSupplierAccount crmSupplierAccount);
 
     /**
-     * 查询客户已关联渠道下的账户选项
+     * 查询渠道账户选项（全部启用渠道下的账户）
      * <p>
-     * 供商机/合同明细选择「渠道账户」使用：只返回该客户已开通渠道下的账户，
-     * 不返回 apiKey 与密码等敏感字段。
+     * 供商机/合同明细选择「渠道账户」使用：不返回 apiKey 与密码等敏感字段。
+     * 客户不再维护关联渠道，账户范围由所选渠道决定，服务端保存时强制校验账户归属。
      *
-     * @param customerId 客户ID
      * @return 账户选项集合（id、accountName、supplierId、supplierName、status、type）
      */
-    public List<CrmSupplierAccountDto> selectAccountOptionsByCustomerId(@Param("customerId") Long customerId);
+    public List<CrmSupplierAccountDto> selectChannelAccountOptions();
 
     /**
      * 查询渠道账户详情（apiKey 为完整值，供编辑回填）

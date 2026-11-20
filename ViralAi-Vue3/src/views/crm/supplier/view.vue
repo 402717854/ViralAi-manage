@@ -13,9 +13,29 @@
         </el-col>
         <el-col :span="12">
           <div class="info-item">
+            <label class="info-label">渠道类型：</label>
+            <span class="info-value plaintext">
+              <el-tag :type="info.supplierType === 2 ? 'warning' : 'success'" size="small" effect="plain">
+                {{ supplierTypeLabel(info.supplierType) }}
+              </el-tag>
+            </span>
+          </div>
+        </el-col>
+      </el-row>
+      <el-row :gutter="20" class="mb8">
+        <el-col :span="12">
+          <div class="info-item">
             <label class="info-label">负责人：</label>
             <span class="info-value plaintext">
               {{ info.ownerUser }}
+            </span>
+          </div>
+        </el-col>
+        <el-col :span="12">
+          <div class="info-item">
+            <label class="info-label">状态：</label>
+            <span class="info-value plaintext">
+              <dict-tag :options="crm_status" :value="info.status" />
             </span>
           </div>
         </el-col>
@@ -41,22 +61,12 @@
       <el-row :gutter="20" class="mb8">
         <el-col :span="12">
           <div class="info-item">
-            <label class="info-label">状态：</label>
-            <span class="info-value plaintext">
-              <dict-tag :options="crm_status" :value="info.status" />
-            </span>
-          </div>
-        </el-col>
-        <el-col :span="12">
-          <div class="info-item">
             <label class="info-label">详细地址：</label>
             <span class="info-value plaintext">
               {{ info.detailAddress }}
             </span>
           </div>
         </el-col>
-      </el-row>
-      <el-row :gutter="20" class="mb8">
         <el-col :span="12">
           <div class="info-item">
             <label class="info-label">备注：</label>
@@ -65,6 +75,8 @@
             </span>
           </div>
         </el-col>
+      </el-row>
+      <el-row :gutter="20" class="mb8">
         <el-col :span="12">
           <div class="info-item">
             <label class="info-label">是否删除：</label>
@@ -84,6 +96,9 @@
           class="mb8"
       />
       <el-table v-else :data="projects" border size="small" class="mb8" empty-text="暂无产品明细">
+        <el-table-column label="模型所属供应商" min-width="150" show-overflow-tooltip>
+          <template #default="scope">{{ scope.row.projectSupplierName || '-' }}</template>
+        </el-table-column>
         <el-table-column label="模型型号" min-width="170" show-overflow-tooltip>
           <template #default="scope">
             <span v-if="scope.row.projectNo">{{ scope.row.projectNo }}</span>
@@ -106,15 +121,6 @@
         </el-table-column>
         <el-table-column label="最大售价折扣" width="105" align="center">
           <template #default="scope">{{ formatNumber(scope.row.maxSellDiscount) }}</template>
-        </el-table-column>
-        <el-table-column label="最小代理折扣" width="105" align="center">
-          <template #default="scope">{{ formatNumber(scope.row.minAgentDiscount) }}</template>
-        </el-table-column>
-        <el-table-column label="最大代理折扣" width="105" align="center">
-          <template #default="scope">{{ formatNumber(scope.row.maxAgentDiscount) }}</template>
-        </el-table-column>
-        <el-table-column label="预计日消耗金额" width="125" align="center">
-          <template #default="scope">{{ formatAmount(scope.row.dailyUsageAmount) }}</template>
         </el-table-column>
       </el-table>
       <h4 class="section-header">渠道账户</h4>
@@ -184,6 +190,18 @@ const accountTypeOptions = [
   { label: '真实账户', value: 2 }
 ]
 
+/** 渠道类型选项：与后端 crm_supplier.supplier_type 约定一致（1自营 2三方） */
+const supplierTypeOptions = [
+  { label: '自营', value: 1 },
+  { label: '三方', value: 2 }
+]
+
+/** 渠道类型文案：历史空值按自营展示，与数据库默认值口径一致 */
+function supplierTypeLabel(value) {
+  const hit = supplierTypeOptions.find(item => item.value === value)
+  return hit ? hit.label : '自营'
+}
+
 /** 账户类型文案 */
 function accountTypeLabel(value) {
   const hit = accountTypeOptions.find(item => item.value === value)
@@ -199,19 +217,7 @@ function formatNumber(value) {
   return isNaN(num) ? value : num.toFixed(2)
 }
 
-/** 金额展示：空值显示 -，有值保留两位小数并加千分位 */
-function formatAmount(value) {
-  if (value === null || value === undefined || value === '') {
-    return '-'
-  }
-  const num = Number(value)
-  if (isNaN(num)) {
-    return value
-  }
-  return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-const { crm_status, crm_deleted } = useDict('crm_deleted', 'crm_status')
+const { crm_deleted, crm_status } = useDict('crm_deleted', 'crm_status')
 
 /** 是否为空值 */
 function isEmpty(val) {

@@ -67,21 +67,6 @@
         </el-col>
       </el-row>
       <el-row :gutter="20" class="mb8">
-        <el-col :span="24">
-          <div class="info-item">
-            <label class="info-label">关联渠道：</label>
-            <span class="info-value plaintext">
-              <template v-if="channelList.length">
-                <el-tag v-for="item in channelList" :key="item.supplierId" size="small" class="channel-tag">
-                  {{ item.supplierName || item.supplierCode || item.supplierId }}
-                </el-tag>
-              </template>
-              <span v-else class="text-placeholder">未关联渠道</span>
-            </span>
-          </div>
-        </el-col>
-      </el-row>
-      <el-row :gutter="20" class="mb8">
         <el-col :span="12">
           <div class="info-item">
             <label class="info-label">备注：</label>
@@ -96,14 +81,12 @@
 </template>
 
 <script setup name="CustomerViewDrawer">
-import { getCustomer, getCustomerSuppliers } from '@/api/crm/customer'
+import { getCustomer } from '@/api/crm/customer'
 
 
 const visible = ref(false)
 const loading = ref(false)
 const info = reactive({})
-/** 客户已关联的渠道 */
-const channelList = ref([])
 
 const open = async (id) => {
   visible.value = true
@@ -111,8 +94,6 @@ const open = async (id) => {
   try {
     const res = await getCustomer(id)
     Object.assign(info, res.data || {})
-    const supRes = await getCustomerSuppliers(id)
-    channelList.value = supRes.data || []
   } catch (error) {
     console.error('获取CRM 客户信息失败:', error)
   } finally {
@@ -122,18 +103,8 @@ const open = async (id) => {
 
 function handleClose() {
   visible.value = false
-  channelList.value = []
   Object.keys(info).forEach(key => delete info[key])
 }
 
 defineExpose({ open })
 </script>
-
-<style scoped>
-.channel-tag {
-  margin: 0 6px 6px 0;
-}
-.text-placeholder {
-  color: #c0c4cc;
-}
-</style>

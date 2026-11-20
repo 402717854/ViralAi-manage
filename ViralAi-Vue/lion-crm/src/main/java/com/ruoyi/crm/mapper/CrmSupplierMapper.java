@@ -2,6 +2,7 @@ package com.ruoyi.crm.mapper;
 
 import java.util.List;
 import com.ruoyi.crm.domain.CrmSupplier;
+import com.ruoyi.crm.dto.CrmChannelProductDto;
 import com.ruoyi.crm.dto.CrmSupplierDto;
 import com.ruoyi.crm.dto.CrmSupplierOptionDto;
 
@@ -35,6 +36,16 @@ public interface CrmSupplierMapper
      * @return CRM 供应商选项集合（仅 id、name）
      */
     public List<CrmSupplierOptionDto> selectAvailableSupplierOptions();
+
+    /**
+     * 查询全部可售模型（启用渠道 × 该渠道已上架模型）
+     * <p>
+     * 商机与合同明细选择模型的数据源：客户不再维护关联渠道，可用范围由渠道上架关系决定，
+     * 每行带 supplierId / supplierName，供前端按渠道分组。
+     *
+     * @return 渠道模型选项集合
+     */
+    public List<CrmChannelProductDto> selectChannelProductOptions();
 
     /**
      * 新增CRM 供应商

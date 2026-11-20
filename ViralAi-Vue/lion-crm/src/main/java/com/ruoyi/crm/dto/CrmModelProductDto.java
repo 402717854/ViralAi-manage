@@ -46,14 +46,6 @@ public class CrmModelProductDto extends BaseEntity
     @Excel(name = "价格明细")
     private String priceDetail;
 
-    /** 基准售价（每千token） */
-    @Excel(name = "基准售价(每千token)", scale = 6)
-    private BigDecimal baseSellPrice;
-
-    /** 基准成本价（每千token） */
-    @Excel(name = "基准成本价(每千token)", scale = 6)
-    private BigDecimal baseCostPrice;
-
     /** 状态0失效1有效 */
     @Excel(name = "状态", readConverterExp = "0=失效,1=有效")
     private Integer status;
@@ -81,14 +73,5 @@ public class CrmModelProductDto extends BaseEntity
 
     /** 渠道售价折扣上限 */
     private BigDecimal maxSellDiscount;
-
-    /** 渠道代理折扣下限 */
-    private BigDecimal minAgentDiscount;
-
-    /** 渠道代理折扣上限 */
-    private BigDecimal maxAgentDiscount;
-
-    /** 预计日消耗金额 */
-    private BigDecimal dailyUsageAmount;
 
 }

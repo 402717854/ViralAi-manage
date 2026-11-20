@@ -12,8 +12,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="type"    column="type"    />
         <result property="source"    column="source"    />
         <result property="priceDetail"    column="price_detail"    />
-        <result property="baseSellPrice"    column="base_sell_price"    />
-        <result property="baseCostPrice"    column="base_cost_price"    />
         <result property="status"    column="status"    />
         <result property="description"    column="description"    />
         <result property="creator"    column="creator"    />
@@ -24,7 +22,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectCrmModelProductVo">
-        select id, name, no, product_code, type, source, price_detail, base_sell_price, base_cost_price,
+        select id, name, no, product_code, type, source, price_detail,
                status, description, creator, create_time, updater, update_time, deleted from crm_model_product
     </sql>
 
@@ -43,7 +41,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="selectCrmModelProductList" parameterType="CrmModelProduct" resultType="com.ruoyi.crm.dto.CrmModelProductDto">
         select a.id, a.name, a.no, a.product_code, a.type, a.source, a.price_detail,
-        a.base_sell_price, a.base_cost_price, a.status, a.description,
+        a.status, a.description,
         e.user_name as creator, a.create_time, c.user_name as updater, a.update_time
         from crm_model_product a
             left join sys_user c on a.updater = c.user_id
@@ -83,8 +81,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             type,
             <if test="source != null">source,</if>
             <if test="priceDetail != null">price_detail,</if>
-            <if test="baseSellPrice != null">base_sell_price,</if>
-            <if test="baseCostPrice != null">base_cost_price,</if>
             <if test="status != null">status,</if>
             <if test="description != null">description,</if>
             <if test="creator != null">creator,</if>
@@ -100,8 +96,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             #{type},
             <if test="source != null">#{source},</if>
             <if test="priceDetail != null">#{priceDetail},</if>
-            <if test="baseSellPrice != null">#{baseSellPrice},</if>
-            <if test="baseCostPrice != null">#{baseCostPrice},</if>
             <if test="status != null">#{status},</if>
             <if test="description != null">#{description},</if>
             <if test="creator != null">#{creator},</if>
@@ -121,8 +115,6 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="type != null">type = #{type},</if>
             <if test="source != null">source = #{source},</if>
             <if test="priceDetail != null">price_detail = #{priceDetail},</if>
-            <if test="baseSellPrice != null">base_sell_price = #{baseSellPrice},</if>
-            <if test="baseCostPrice != null">base_cost_price = #{baseCostPrice},</if>
             <if test="status != null">status = #{status},</if>
             <if test="description != null">description = #{description},</if>
             <if test="updater != null">updater = #{updater},</if>
@@ -145,13 +137,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <!-- 渠道可用模型：仅返回该渠道已关联且启用的模型 -->
     <select id="selectProductsBySupplier" parameterType="Long" resultType="com.ruoyi.crm.dto.CrmModelProductDto">
+        <!-- 按「报价归属渠道(supplier_id) + 模型」取可售模型。
+             同一渠道下同一模型可能来自多个上游供应商（project_supplier_id），
+             这里聚合为一条，折扣取区间并集，避免同一渠道出现重复模型行 -->
         select p.id, p.name, p.no, p.product_code, p.type, p.source, p.price_detail,
-               p.base_sell_price, p.base_cost_price, p.status, p.description,
-               sp.min_cost_discount, sp.max_cost_discount, sp.min_sell_discount, sp.max_sell_discount,
-               sp.min_agent_discount, sp.max_agent_discount, sp.daily_usage_amount
-        from crm_supplier_project sp
-        inner join crm_model_product p on sp.project_id = p.id
-        where sp.supplier_id = #{supplierId} and p.deleted = 0 and p.status = 1
+               p.status, p.description,
+               agg.min_cost_discount, agg.max_cost_discount, agg.min_sell_discount, agg.max_sell_discount
+        from (
+            select supplier_id, project_id,
+                   min(min_cost_discount) as min_cost_discount,
+                   max(max_cost_discount) as max_cost_discount,
+                   min(min_sell_discount) as min_sell_discount,
+                   max(max_sell_discount) as max_sell_discount
+              from crm_supplier_project
+             where supplier_id = #{supplierId}
+             group by supplier_id, project_id
+        ) agg
+        inner join crm_model_product p on agg.project_id = p.id
+        where p.deleted = 0 and p.status = 1
         order by p.id
     </select>
 </mapper>

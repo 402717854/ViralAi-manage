@@ -2,6 +2,8 @@ package com.ruoyi.crm.service;
 
 import java.util.List;
 import com.ruoyi.crm.domain.CrmSupplier;
+import com.ruoyi.crm.dto.CrmChannelProductDto;
+import com.ruoyi.crm.dto.CrmProjectChannelDto;
 import com.ruoyi.crm.dto.CrmSupplierAccountDto;
 import com.ruoyi.crm.dto.CrmSupplierDto;
 import com.ruoyi.crm.dto.CrmSupplierOptionDto;
@@ -38,6 +40,36 @@ public interface ICrmSupplierService
      * @return CRM 供应商选项集合（仅 id、name）
      */
     public List<CrmSupplierOptionDto> selectAvailableSupplierOptions();
+
+    /**
+     * 查询全部可售模型（启用渠道 × 渠道已上架模型）
+     * <p>
+     * 商机与合同明细选择模型的数据源。客户不再维护关联渠道，渠道模型关系由
+     * 商机/合同明细行（渠道 + 模型 + 渠道账户）承载并在保存时强制校验。
+     *
+     * @return 渠道模型选项集合（含所属渠道）
+     */
+    public List<CrmChannelProductDto> selectChannelProductOptions();
+
+    /**
+     * 查询渠道账户选项（全部启用渠道下的账户，不含敏感字段）
+     * <p>
+     * 商机与合同明细选择渠道账户的下拉数据源。
+     *
+     * @return 渠道账户选项集合（含所属渠道）
+     */
+    public List<CrmSupplierAccountDto> selectChannelAccountOptions();
+
+    /**
+     * 按模型ID查询报过价的渠道（含渠道名称与折扣区间）
+     * <p>
+     * 供应商报价明细选择模型型号后懒加载「模型所属供应商」并带出折扣；
+     * 查不到记录时由前端按当前供应商处理。
+     *
+     * @param projectId 模型编号
+     * @return 报价渠道集合
+     */
+    public List<CrmProjectChannelDto> selectChannelListByProjectId(Long projectId);
 
     /**
      * 按供应商编号查询其产品关联明细

@@ -2,13 +2,18 @@ package com.ruoyi.crm.service.impl;
 
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.DateUtils;
 import com.ruoyi.common.utils.SecurityUtils;
 import com.ruoyi.crm.domain.CrmSupplierAccount;
 import com.ruoyi.crm.domain.CrmSupplierProject;
+import com.ruoyi.crm.dto.CrmChannelProductDto;
+import com.ruoyi.crm.dto.CrmProjectChannelDto;
 import com.ruoyi.crm.dto.CrmSupplierAccountDto;
 import com.ruoyi.crm.dto.CrmSupplierDto;
 import com.ruoyi.crm.dto.CrmSupplierOptionDto;
@@ -87,6 +92,44 @@ public class CrmSupplierServiceImpl implements ICrmSupplierService
     public List<CrmSupplierOptionDto> selectAvailableSupplierOptions()
     {
         return crmSupplierMapper.selectAvailableSupplierOptions();
+    }
+
+    /**
+     * 查询全部可售模型（启用渠道 × 渠道已上架模型）
+     *
+     * @return 渠道模型选项集合（含所属渠道）
+     */
+    @Override
+    public List<CrmChannelProductDto> selectChannelProductOptions()
+    {
+        return crmSupplierMapper.selectChannelProductOptions();
+    }
+
+    /**
+     * 查询渠道账户选项（全部启用渠道下的账户，不含敏感字段）
+     *
+     * @return 渠道账户选项集合（含所属渠道）
+     */
+    @Override
+    public List<CrmSupplierAccountDto> selectChannelAccountOptions()
+    {
+        return crmSupplierAccountMapper.selectChannelAccountOptions();
+    }
+
+    /**
+     * 按模型ID查询报过价的渠道（含渠道名称与折扣区间）
+     *
+     * @param projectId 模型编号
+     * @return 报价渠道集合
+     */
+    @Override
+    public List<CrmProjectChannelDto> selectChannelListByProjectId(Long projectId)
+    {
+        if (projectId == null)
+        {
+            return Collections.emptyList();
+        }
+        return crmSupplierProjectMapper.selectChannelListByProjectId(projectId);
     }
 
     /**
@@ -212,13 +255,19 @@ public class CrmSupplierServiceImpl implements ICrmSupplierService
     }
 
     /**
-     * 保存供应商产品关联（全量替换语义）
+     * 保存供应商产品关联（以当前供应商为维度的全量替换）
      * <p>
      * projects 为 null 时视为本次未提交关联信息，不做任何变更；
-     * 为空数组时清空该供应商全部关联；非空时先删除旧关联再按提交内容重建。
-     * 列表内 projectId 重复时静默去重，仅保留第一条；projectId 为空的行直接跳过。
+     * 为空数组时清空该供应商全部关联；非空时先删除该供应商旧关联再按提交内容重建
+     * （删除范围始终限定 supplier_id = 当前供应商，不会影响其它供应商的数据）。
+     * <p>
+     * 每个明细行承载「模型所属供应商 + 模型型号」：projectSupplierId 表示该模型取自哪个
+     * 供应商的模型池，可与当前供应商不同——因此同一供应商的报价单里可以同时挂
+     * B 的 gpt-4o 与 C 的 gpt-4o，各自定义不同的成本/售价折扣。
+     * 未填 projectSupplierId 时落当前供应商。同一「模型所属供应商 + 模型」重复提交时
+     * 静默去重，projectId 为空的行直接跳过。
      *
-     * @param supplierId 供应商编号
+     * @param supplierId 当前供应商编号（报价归属方）
      * @param projects   产品关联列表
      * @param nowDate    当前时间
      * @param userId     当前登录用户编号
@@ -231,27 +280,37 @@ public class CrmSupplierServiceImpl implements ICrmSupplierService
         }
         crmSupplierProjectMapper.deleteCrmSupplierProjectBySupplierId(supplierId);
 
-        Set<Long> projectIds = new LinkedHashSet<>();
+        Set<String> handledKeys = new LinkedHashSet<>();
+        Map<Long, Boolean> supplierExists = new HashMap<>();
         for (CrmSupplierProject project : projects)
         {
             if (project == null || project.getProjectId() == null)
             {
                 continue;
             }
-            if (!projectIds.add(project.getProjectId()))
+            // 模型所属供应商：未填时视为当前供应商自己的模型池
+            Long projectSupplierId = project.getProjectSupplierId() != null
+                    ? project.getProjectSupplierId() : supplierId;
+            Boolean exists = supplierExists.computeIfAbsent(projectSupplierId, key -> {
+                CrmSupplier supplier = crmSupplierMapper.selectCrmSupplierById(key);
+                return supplier != null && !Integer.valueOf(1).equals(supplier.getDeleted());
+            });
+            if (!Boolean.TRUE.equals(exists))
+            {
+                throw new ServiceException("产品明细中模型所属供应商不存在或已删除：" + projectSupplierId);
+            }
+            if (!handledKeys.add(projectSupplierId + ":" + project.getProjectId()))
             {
                 continue;
             }
             CrmSupplierProject entity = new CrmSupplierProject();
             entity.setSupplierId(supplierId);
+            entity.setProjectSupplierId(projectSupplierId);
             entity.setProjectId(project.getProjectId());
             entity.setMinCostDiscount(project.getMinCostDiscount());
             entity.setMaxCostDiscount(project.getMaxCostDiscount());
             entity.setMinSellDiscount(project.getMinSellDiscount());
             entity.setMaxSellDiscount(project.getMaxSellDiscount());
-            entity.setMinAgentDiscount(project.getMinAgentDiscount());
-            entity.setMaxAgentDiscount(project.getMaxAgentDiscount());
-            entity.setDailyUsageAmount(project.getDailyUsageAmount());
             entity.setCreator(userId);
             entity.setUpdater(userId);
             entity.setCreateTime(nowDate);

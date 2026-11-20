@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ruoyi.crm.mapper.CrmContractBillSubMapper">
+
+    <!-- 子账单列表：join 合同/客户/渠道取展示名称，join 父账单取账单状态。
+         子账单不维护状态，bill_status 必须取自父账单，避免前端双口径。
+         明细查询走 (bill_id, call_time) 复合索引，不在此处关联台账 -->
+    <select id="selectCrmContractBillSubList" parameterType="com.ruoyi.crm.dto.CrmContractBillSubDto"
+            resultType="com.ruoyi.crm.dto.CrmContractBillSubDto">
+        select a.id, a.sub_bill_no, a.bill_id, a.bill_no, a.bill_cycle, a.bill_date,
+               a.contract_id, ct.contact_no, ct.contract_name,
+               a.customer_id, cu.name as customer_name,
+               a.supplier_id, s.name as supplier_name,
+               a.supplier_account_id, a.usage_count,
+               a.total_tokens, a.total_sell_amount, a.total_cost_amount, a.total_gross_profit,
+               b.bill_status, a.creator, a.create_time, a.update_time
+        from crm_contract_bill_sub a
+        left join crm_contract_bill b on b.id = a.bill_id
+        left join crm_contract ct on ct.id = a.contract_id
+        left join crm_customer cu on cu.id = a.customer_id
+        left join crm_supplier s on s.id = a.supplier_id
+        <where>
+            <if test="billId != null"> and a.bill_id = #{billId}</if>
+            <if test="billNo != null and billNo != ''"> and a.bill_no like concat('%', #{billNo}, '%')</if>
+            <if test="subBillNo != null and subBillNo != ''"> and a.sub_bill_no like concat('%', #{subBillNo}, '%')</if>
+            <if test="billCycle != null and billCycle != ''"> and a.bill_cycle = #{billCycle}</if>
+            <if test="contractId != null"> and a.contract_id = #{contractId}</if>
+            <if test="contactNo != null and contactNo != ''"> and ct.contact_no like concat('%', #{contactNo}, '%')</if>
+            <if test="customerId != null"> and a.customer_id = #{customerId}</if>
+            <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+            <if test="params.beginDate != null and params.beginDate != ''">
+                and a.bill_date &gt;= #{params.beginDate}
+            </if>
+            <if test="params.endDate != null and params.endDate != ''">
+                and a.bill_date &lt;= #{params.endDate}
+            </if>
+            <if test="params.scopeSupplierIds != null and params.scopeSupplierIds.size() > 0">
+                and a.supplier_id in
+                <foreach collection="params.scopeSupplierIds" item="scopeSupplierId" open="(" separator="," close=")">
+                    #{scopeSupplierId}
+                </foreach>
+            </if>
+        </where>
+        order by a.bill_cycle desc, a.contract_id, a.bill_date
+    </select>
+
+    <insert id="batchInsertCrmContractBillSub" parameterType="java.util.List">
+        insert into crm_contract_bill_sub (
+            sub_bill_no, bill_id, bill_no, bill_cycle, bill_date,
+            contract_id, customer_id, supplier_id, supplier_account_id,
+            usage_count, total_tokens, total_sell_amount, total_cost_amount, total_gross_profit,
+            creator, create_time
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (#{item.subBillNo}, #{item.billId}, #{item.billNo}, #{item.billCycle}, #{item.billDate},
+             #{item.contractId}, #{item.customerId}, #{item.supplierId},
+             ifnull(#{item.supplierAccountId}, 0),
+             ifnull(#{item.usageCount}, 0), ifnull(#{item.totalTokens}, 0),
+             ifnull(#{item.totalSellAmount}, 0), ifnull(#{item.totalCostAmount}, 0),
+             ifnull(#{item.totalGrossProfit}, 0),
+             #{item.creator}, ifnull(#{item.createTime}, sysdate()))
+        </foreach>
+    </insert>
+
+    <select id="countByBillId" resultType="java.lang.Integer">
+        select count(1) from crm_contract_bill_sub where bill_id = #{billId}
+    </select>
+
+    <delete id="deleteByBillId">
+        delete from crm_contract_bill_sub where bill_id = #{billId}
+    </delete>
+
+</mapper>

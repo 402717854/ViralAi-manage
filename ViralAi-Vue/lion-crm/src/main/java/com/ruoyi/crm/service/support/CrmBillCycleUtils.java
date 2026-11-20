@@ -2,8 +2,10 @@ package com.ruoyi.crm.service.support;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
@@ -71,6 +73,44 @@ public class CrmBillCycleUtils
             throw new ServiceException("账期格式错误，应为 yyyy-MM，例如 2026-11");
         }
         return value;
+    }
+
+    /**
+     * 取以指定账期结尾的连续账期列表（升序）
+     *
+     * <p>用于趋势图横轴：即使中间某些账期没有任何用量，也要占据一个刻度，
+     * 否则横轴会被压缩成「有数据的月份」，趋势的疏密将失真。</p>
+     *
+     * @param endCycle 结束账期 yyyy-MM，为空取当前账期
+     * @param months 期数，小于 1 按 1 处理，大于 36 按 36 处理
+     * @return 账期列表，按时间升序，最后一项为 endCycle
+     */
+    public static List<String> recentCycles(String endCycle, int months)
+    {
+        String cycle = normalize(endCycle);
+        int size = Math.max(1, Math.min(months, 36));
+        Date end;
+        try
+        {
+            end = new SimpleDateFormat(CYCLE_PATTERN).parse(cycle);
+        }
+        catch (ParseException e)
+        {
+            throw new ServiceException("账期格式错误，应为 yyyy-MM，例如 2026-11");
+        }
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(end);
+        calendar.set(Calendar.DAY_OF_MONTH, 1);
+        calendar.add(Calendar.MONTH, -(size - 1));
+
+        SimpleDateFormat format = new SimpleDateFormat(CYCLE_PATTERN);
+        List<String> cycles = new ArrayList<>(size);
+        for (int i = 0; i < size; i++)
+        {
+            cycles.add(format.format(calendar.getTime()));
+            calendar.add(Calendar.MONTH, 1);
+        }
+        return cycles;
     }
 
     /**

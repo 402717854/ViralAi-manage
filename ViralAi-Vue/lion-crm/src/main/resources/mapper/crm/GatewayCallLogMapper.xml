@@ -102,6 +102,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where a.deleted = 0 and a.call_status = 1
           and a.call_time &gt;= #{startTime} and a.call_time &lt;= #{endTime}
           <if test="supplierId != null"> and a.supplier_id = #{supplierId}</if>
+          <if test="customerId != null"> and a.customer_id = #{customerId}</if>
           and not exists (select 1 from crm_contract_usage u where u.call_log_id = a.id)
         order by a.call_time, a.id
         limit 20000

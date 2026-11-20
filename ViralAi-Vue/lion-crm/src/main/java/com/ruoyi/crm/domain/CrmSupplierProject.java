@@ -24,8 +24,17 @@ public class CrmSupplierProject extends BaseEntity
     /** $column.columnComment */
     private Long id;
 
-    /** 供应商ID */
+    /** 供应商ID（本条报价的归属方，产品明细的维护主体） */
     private Long supplierId;
+
+    /**
+     * 模型所属供应商ID
+     * <p>
+     * 这个模型取自哪个供应商（渠道）的模型池。与 {@link #supplierId} 可以不同：
+     * 供应商 A 的报价单里可以挂 B 的 gpt-4o，再按 A 的口径定义折扣。
+     * 为空视为当前供应商自身，由服务层落库时回填。
+     */
+    private Long projectSupplierId;
 
     /** 模型ID */
     private Long projectId;
@@ -41,15 +50,6 @@ public class CrmSupplierProject extends BaseEntity
 
     /** 最大售价折扣 */
     private BigDecimal maxSellDiscount;
-
-    /** 最小代理折扣 */
-    private BigDecimal minAgentDiscount;
-
-    /** 最大代理折扣 */
-    private BigDecimal maxAgentDiscount;
-
-    /** 预计日消耗金额 */
-    private BigDecimal dailyUsageAmount;
 
     /** $column.columnComment */
     private Long creator;

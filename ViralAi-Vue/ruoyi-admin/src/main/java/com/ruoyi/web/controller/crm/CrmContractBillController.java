@@ -25,6 +25,7 @@ import com.ruoyi.crm.dto.CrmBillDiffHandleVo;
 import com.ruoyi.crm.dto.CrmBillGenerateVo;
 import com.ruoyi.crm.dto.CrmContractBillDiffDto;
 import com.ruoyi.crm.dto.CrmContractBillDto;
+import com.ruoyi.crm.dto.CrmContractBillSubDto;
 import com.ruoyi.crm.service.ICrmContractBillService;
 
 /**
@@ -33,7 +34,9 @@ import com.ruoyi.crm.service.ICrmContractBillService;
  * <p>接口清单：</p>
  * <pre>
  * GET    /crm/bill/list          账单分页
- * GET    /crm/bill/{id}          账单详情（账单 + 用量明细 + 差异）
+ * GET    /crm/bill/sub/list      子账单分页（父账单按自然日拆分）
+ * GET    /crm/bill/{id}          账单详情（账单 + 差异 + 用量条数）
+ * GET    /crm/bill/{id}/usages   账单归属用量明细分页
  * POST   /crm/bill/generate      生成账单（渠道 + 账期）
  * POST   /crm/bill/audit         复核（确认 / 差异挂起）
  * POST   /crm/bill/settle/{id}   结算并回写商机结算状态
@@ -66,6 +69,25 @@ public class CrmContractBillController extends BaseController
     }
 
     /**
+     * 查询子账单分页列表
+     *
+     * <p>子账单是父账单按自然日的拆分结果，供「子账单明细」二级页面展示；
+     * 指定 billId 时先做数据权限校验，避免通过 billId 探测其他渠道的账单。</p>
+     */
+    @PreAuthorize("@ss.hasPermi('crm:bill:list')")
+    @GetMapping("/sub/list")
+    public TableDataInfo subList(CrmContractBillSubDto query)
+    {
+        if (query.getBillId() != null)
+        {
+            crmContractBillService.assertBillAccessible(query.getBillId());
+        }
+        startPage();
+        List<CrmContractBillSubDto> list = crmContractBillService.selectCrmContractBillSubList(query);
+        return getDataTable(list);
+    }
+
+    /**
      * 查询账单详情
      */
     @PreAuthorize("@ss.hasPermi('crm:bill:list')")
@@ -73,6 +95,21 @@ public class CrmContractBillController extends BaseController
     public AjaxResult getInfo(@PathVariable("id") Long id)
     {
         return success(crmContractBillService.selectCrmContractBillDetail(id));
+    }
+
+    /**
+     * 分页查询账单归属的用量明细
+     *
+     * <p>账单按「合同 + 渠道 + 账期」归集，单张账单可能挂整月流水，故必须分页；
+     * 数据权限校验放在 {@code startPage()} 之前，避免分页插件作用到校验语句上。</p>
+     */
+    @PreAuthorize("@ss.hasPermi('crm:bill:list')")
+    @GetMapping("/{id}/usages")
+    public TableDataInfo usages(@PathVariable("id") Long id)
+    {
+        crmContractBillService.assertBillAccessible(id);
+        startPage();
+        return getDataTable(crmContractBillService.selectBillUsagePage(id));
     }
 
     /**

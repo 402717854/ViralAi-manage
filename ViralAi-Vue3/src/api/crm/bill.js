@@ -9,11 +9,29 @@ export function listBill(query) {
   })
 }
 
-// 查询账单详情（账单 + 用量明细 + 差异）
+// 查询子账单分页列表（父账单按自然日拆分）
+export function listBillSub(query) {
+  return request({
+    url: '/crm/bill/sub/list',
+    method: 'get',
+    params: query
+  })
+}
+
+// 查询账单详情（账单 + 差异 + 用量条数）
 export function getBill(id) {
   return request({
     url: '/crm/bill/' + id,
     method: 'get'
+  })
+}
+
+// 分页查询账单归属的用量明细
+export function listBillUsages(billId, query) {
+  return request({
+    url: '/crm/bill/' + billId + '/usages',
+    method: 'get',
+    params: query
   })
 }
 

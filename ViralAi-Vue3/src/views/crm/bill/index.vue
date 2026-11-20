@@ -103,6 +103,11 @@
       <el-table-column label="客户" align="center" prop="customerName" min-width="130" show-overflow-tooltip />
       <el-table-column label="渠道" align="center" prop="supplierName" min-width="120" show-overflow-tooltip />
       <el-table-column label="账期" align="center" prop="billCycle" width="100" />
+      <el-table-column label="生成时间" align="center" prop="createTime" width="165">
+        <template #default="scope">
+          <span>{{ parseTime(scope.row.createTime, '{y}-{m}-{d} {h}:{i}') || "-" }}</span>
+        </template>
+      </el-table-column>
       <el-table-column label="总token" align="center" prop="totalTokens" width="120" />
       <el-table-column label="应收总额" align="center" width="150" show-overflow-tooltip>
         <template #default="scope">
@@ -136,9 +141,10 @@
           <span>{{ parseTime(scope.row.auditTime, '{y}-{m}-{d} {h}:{i}') || "-" }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" align="center" width="200" fixed="right">
+      <el-table-column label="操作" align="center" width="270" fixed="right">
         <template #default="scope">
           <el-button link type="primary" icon="View" @click="openDetail(scope.row)">详情</el-button>
+          <el-button link type="primary" icon="Tickets" @click="openSubBills(scope.row)">子账单</el-button>
           <el-button
             v-if="canAudit(scope.row)"
             link
@@ -260,12 +266,15 @@
           <el-descriptions-item label="复核时间">
             {{ parseTime(detail.bill.auditTime, '{y}-{m}-{d} {h}:{i}') || "-" }}
           </el-descriptions-item>
-          <el-descriptions-item label="备注" :span="3">{{ detail.bill.remark || "-" }}</el-descriptions-item>
+          <el-descriptions-item label="生成时间">
+            {{ parseTime(detail.bill.createTime, '{y}-{m}-{d} {h}:{i}') || "-" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="备注" :span="2">{{ detail.bill.remark || "-" }}</el-descriptions-item>
         </el-descriptions>
 
         <el-tabs v-model="detailTab" class="detail-tabs">
-          <el-tab-pane :label="`用量明细（${(detail.usages || []).length}）`" name="usages">
-            <el-table :data="detail.usages" size="small" max-height="420">
+          <el-tab-pane :label="`用量明细（${detail.usageCount || 0}）`" name="usages">
+            <el-table v-loading="usageLoading" :data="usageRows" size="small" max-height="420">
               <el-table-column label="流水号" prop="callNo" min-width="220" show-overflow-tooltip />
               <el-table-column label="模型编码" prop="productCode" min-width="140" show-overflow-tooltip />
               <el-table-column label="token" prop="totalTokens" width="100" />
@@ -282,6 +291,13 @@
                 <template #default="scope">{{ parseTime(scope.row.callTime, '{y}-{m}-{d} {h}:{i}') }}</template>
               </el-table-column>
             </el-table>
+            <pagination
+              v-show="usageTotal > 0"
+              :total="usageTotal"
+              v-model:page="usageQuery.pageNum"
+              v-model:limit="usageQuery.pageSize"
+              @pagination="loadUsages"
+            />
           </el-tab-pane>
           <el-tab-pane :label="`对账差异（${(detail.diffs || []).length}）`" name="diffs">
             <el-table :data="detail.diffs" size="small" max-height="420">
@@ -306,12 +322,14 @@
 </template>
 
 <script setup name="Bill">
-import { listBill, getBill, generateBill, auditBill, settleBill } from "@/api/crm/bill"
+import { listBill, getBill, listBillUsages, generateBill, auditBill, settleBill } from "@/api/crm/bill"
 import { getSupplierOptions } from "@/api/crm/supplier"
 import { getCustomerOptions } from "@/api/crm/customer"
 import { parseTime } from "@/utils/ruoyi"
 
 const { proxy } = getCurrentInstance()
+const route = useRoute()
+const router = useRouter()
 const { crm_bill_status, crm_bill_diff_type, crm_bill_diff_handle } = proxy.useDict(
   "crm_bill_status",
   "crm_bill_diff_type",
@@ -337,6 +355,15 @@ const queryParams = ref({
   billCycle: undefined,
   statusList: []
 })
+
+/**
+ * 首页待办下钻：URL 携带 billStatus 时预置状态筛选。
+ * 只在初始化时读取一次，避免影响页面内的后续操作。
+ */
+const initBillStatus = Number(proxy.$route.query.billStatus)
+if (initBillStatus) {
+  queryParams.value.statusList = [initBillStatus]
+}
 
 /** 账单状态常量，与后端 ContractBillStatusEnum 一致 */
 const BILL_STATUS = {
@@ -528,11 +555,30 @@ function handleSettle(row) {
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailTab = ref("usages")
-const detail = ref({ bill: null, usages: [], diffs: [] })
+const detail = ref({ bill: null, usageCount: 0, diffs: [] })
+/** 当前查看的账单ID，供用量明细分页复用 */
+const currentBillId = ref(null)
+
+/** 用量明细分页状态：单个账单可能归集整月流水，必须服务端分页 */
+const usageRows = ref([])
+const usageTotal = ref(0)
+const usageLoading = ref(false)
+const usageQuery = ref({ pageNum: 1, pageSize: 20 })
+
+/** 打开子账单二级页面：路径由当前列表路由推导，兼容菜单父级路径差异 */
+function openSubBills(row) {
+  const base = route.path.replace(/\/+$/, "")
+  router.push({ path: base + "/sub", query: { billId: row.id } })
+}
 
 function openDetail(row) {
-  detail.value = { bill: null, usages: [], diffs: [] }
+  currentBillId.value = row.id
+  detail.value = { bill: null, usageCount: 0, diffs: [] }
+  usageRows.value = []
+  usageTotal.value = 0
+  usageQuery.value.pageNum = 1
   detailLoad(row.id)
+  loadUsages()
   detailOpen.value = true
 }
 
@@ -542,12 +588,24 @@ function detailLoad(id) {
     const data = res.data || {}
     detail.value = {
       bill: data.bill,
-      usages: data.usages || [],
+      usageCount: data.usageCount || 0,
       diffs: data.diffs || []
     }
     detailTab.value = "usages"
   }).finally(() => {
     detailLoading.value = false
+  })
+}
+
+/** 加载当前账单的用量明细（分页） */
+function loadUsages() {
+  if (!currentBillId.value) return
+  usageLoading.value = true
+  listBillUsages(currentBillId.value, usageQuery.value).then(res => {
+    usageRows.value = res.rows || []
+    usageTotal.value = res.total || 0
+  }).finally(() => {
+    usageLoading.value = false
   })
 }
 

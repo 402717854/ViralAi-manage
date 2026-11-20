@@ -207,6 +207,15 @@ const queryParams = ref({
   callNo: undefined
 })
 
+/**
+ * 首页待办下钻：URL 携带 handleStatus 时预置处理状态。
+ * 0 是合法值（待处理），不能用真值判断，必须显式排除空串与 undefined。
+ */
+const initHandleStatus = proxy.$route.query.handleStatus
+if (initHandleStatus !== undefined && initHandleStatus !== null && initHandleStatus !== "") {
+  queryParams.value.handleStatus = Number(initHandleStatus)
+}
+
 function formatAmount(value) {
   if (value === null || value === undefined || value === "") {
     return "-"

@@ -23,9 +23,10 @@ import com.ruoyi.common.enums.BusinessType;
 import com.ruoyi.common.utils.poi.ExcelUtil;
 import com.ruoyi.crm.dto.CrmContractUsageDto;
 import com.ruoyi.crm.dto.CrmCustomerSupplierAccountVo;
-import com.ruoyi.crm.dto.CrmSupplierStatVo;
+import com.ruoyi.crm.dto.CrmCustomerSupplierStatVo;
 import com.ruoyi.crm.dto.CrmUsageBoardVo;
 import com.ruoyi.crm.dto.CrmUsageReconcileVo;
+import com.ruoyi.crm.dto.CrmUsageTrendVo;
 import com.ruoyi.crm.service.ICrmContractService;
 import com.ruoyi.crm.service.ICrmContractUsageService;
 
@@ -37,10 +38,11 @@ import com.ruoyi.crm.service.ICrmContractUsageService;
  * GET    /crm/usage/list              台账分页
  * GET    /crm/usage/{id}              台账详情
  * GET    /crm/usage/customer-supplier-accounts  客户可用渠道账户（上传联动）
- * POST   /crm/usage/reconcile         手动对账（区间 + 渠道）
+ * POST   /crm/usage/reconcile         手动对账（调用时间 + 渠道 + 客户）
  * POST   /crm/usage/rematch/{id}      单条重新匹配
  * GET    /crm/usage/board             渠道对账看板
- * GET    /crm/usage/supplier-stat     渠道对账汇总
+ * GET    /crm/usage/board/trend       用量趋势（近 N 期）
+ * GET    /crm/usage/customer-supplier-stat  客户+渠道对账汇总（/supplier-stat 为旧别名）
  * POST   /crm/usage/export            导出台账
  * </pre>
  *
@@ -98,6 +100,10 @@ public class CrmUsageController extends BaseController
 
     /**
      * 手动执行对账
+     *
+     * <p>按「调用时间区间 + 渠道 + 客户」扫描尚未生成台账的网关流水并即时匹配计费。
+     * 渠道与客户均为可选条件，为空表示该维度不限；三者同时指定时取交集，
+     * 常用于补签合同后只对某个客户的流水单独补对账。</p>
      */
     @PreAuthorize("@ss.hasPermi('crm:usage:reconcile')")
     @RepeatSubmit
@@ -133,13 +139,31 @@ public class CrmUsageController extends BaseController
     }
 
     /**
-     * 渠道对账汇总（看板副表 / 报表复用）
+     * 用量趋势（近 N 期，默认 6 期）
+     *
+     * <p>以结束账期为基准向前取连续账期，口径与看板概览一致；无数据的账期返回 0 值占位，
+     * 前端可直接按返回顺序绘制，不需要再补刻度。</p>
      */
     @PreAuthorize("@ss.hasPermi('crm:usage:stat')")
-    @GetMapping("/supplier-stat")
-    public AjaxResult supplierStat(@RequestParam(value = "billCycle", required = false) String billCycle)
+    @GetMapping("/board/trend")
+    public AjaxResult boardTrend(@RequestParam(value = "billCycle", required = false) String billCycle,
+                                 @RequestParam(value = "months", required = false, defaultValue = "6") Integer months)
     {
-        List<CrmSupplierStatVo> list = crmContractUsageService.selectSupplierStat(billCycle);
+        List<CrmUsageTrendVo> list = crmContractUsageService.selectUsageTrend(billCycle, months);
+        return success(list);
+    }
+
+    /**
+     * 客户 + 渠道对账汇总（看板副表 / 报表复用）
+     *
+     * <p>以「客户 + 渠道」为统计基准，一行代表某客户在某渠道的应收、成本与毛利。
+     * 保留旧路径 {@code /supplier-stat} 作为别名，避免历史调用方与外部报表脚本失效。</p>
+     */
+    @PreAuthorize("@ss.hasPermi('crm:usage:stat')")
+    @GetMapping({"/customer-supplier-stat", "/supplier-stat"})
+    public AjaxResult customerSupplierStat(@RequestParam(value = "billCycle", required = false) String billCycle)
+    {
+        List<CrmCustomerSupplierStatVo> list = crmContractUsageService.selectCustomerSupplierStat(billCycle);
         return success(list);
     }
 

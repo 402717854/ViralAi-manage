@@ -90,11 +90,6 @@
       <el-table-column label="模型厂商" align="center" prop="name" show-overflow-tooltip />
       <el-table-column label="模型型号" align="center" prop="no" show-overflow-tooltip />
       <el-table-column label="模型编码" align="center" prop="productCode" min-width="150" show-overflow-tooltip />
-      <el-table-column label="基准价(售价/成本)" align="center" width="180">
-        <template #default="scope">
-          <span>{{ formatPrice(scope.row.baseSellPrice) }} / {{ formatPrice(scope.row.baseCostPrice) }}</span>
-        </template>
-      </el-table-column>
       <el-table-column label="模型类型" align="center" prop="type" width="110">
         <template #default="scope">
           <el-tag v-if="scope.row.type != null" size="small" type="info">{{ modelTypeLabel(scope.row.type) }}</el-tag>
@@ -109,9 +104,10 @@
       </el-table-column>
       <el-table-column label="创建者" align="center" prop="creator" width="110" />
       <el-table-column label="创建时间" align="center" prop="createTime" width="160" />
-      <el-table-column label="操作" align="center" width="160" class-name="small-padding fixed-width">
+      <el-table-column label="操作" align="center" width="230" class-name="small-padding fixed-width">
         <template #default="scope">
           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" v-hasPermi="['crm:product:edit']">修改</el-button>
+          <el-button link type="primary" icon="CopyDocument" @click="handleCopy(scope.row)" v-hasPermi="['crm:product:add']">复制</el-button>
           <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)" v-hasPermi="['crm:product:remove']">删除</el-button>
         </template>
       </el-table-column>
@@ -127,6 +123,15 @@
 
     <!-- 添加或修改CRM模型产品对话框 -->
     <el-dialog :title="title" v-model="open" width="1200px" append-to-body>
+      <!-- 复制来源提示：编码是对账匹配键，必须改成网关实际 product_code 后再保存 -->
+      <el-alert
+        v-if="copySource"
+        type="warning"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+        :title="`复制自「${copySource}」：模型型号与编码已自动追加 -copy 后缀，保存前请按网关实际编码确认修改`"
+      />
       <el-form ref="productRef" :model="form" :rules="rules" label-width="110px">
         <el-divider content-position="left">基础信息</el-divider>
         <el-row :gutter="20">
@@ -169,30 +174,6 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8">
-            <el-form-item label="基准售价" prop="baseSellPrice">
-              <el-input-number
-                v-model="form.baseSellPrice"
-                :precision="6"
-                :step="0.1"
-                :controls="false"
-                placeholder="每千token"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="基准成本价" prop="baseCostPrice">
-              <el-input-number
-                v-model="form.baseCostPrice"
-                :precision="6"
-                :step="0.1"
-                :controls="false"
-                placeholder="每千token"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
           <el-col :span="24">
             <el-form-item label="价格明细" prop="priceDetail">
               <el-input v-model="form.priceDetail" type="textarea" :rows="2" placeholder="请输入价格明细" />
@@ -229,6 +210,8 @@ const single = ref(true)
 const multiple = ref(true)
 const total = ref(0)
 const title = ref("")
+/** 复制来源描述：非空表示当前表单是「复制」而来，用于展示提示 */
+const copySource = ref("")
 
 const { crm_deleted,crm_bus_status,crm_bus_contact,crm_bus_settle } = useDict('crm_deleted','crm_bus_status','crm_bus_contact','crm_bus_settle')
 
@@ -272,15 +255,6 @@ function modelTypeLabel(value) {
   return hit ? hit.label : value
 }
 
-/** 基准价展示：未维护时以 - 占位，避免误导为 0 元 */
-function formatPrice(value) {
-  if (value === null || value === undefined || value === "") {
-    return "-"
-  }
-  return Number(value).toFixed(6)
-}
-
-
 /** 查询CRM模型产品列表 */
 function getList() {
   loading.value = true
@@ -300,10 +274,12 @@ function cancel() {
 
 /** 表单重置 */
 function reset() {
+  copySource.value = ""
   form.value = {
     id: null,
     name: null,
     no: null,
+    productCode: null,
     type: null,
     source: null,
     priceDetail: null,
@@ -349,6 +325,40 @@ function handleUpdate(row) {
     open.value = true
     title.value = "修改CRM模型产品"
   })
+}
+
+/** 复制后缀：已带 -copy / -copyN 时递增序号，避免与原行型号、编码完全一致 */
+function buildCopyValue(value) {
+  if (!value) {
+    return value
+  }
+  const matched = /^(.*?)-copy(\d*)$/.exec(value)
+  if (matched) {
+    const seq = matched[2] ? Number(matched[2]) + 1 : 2
+    return `${matched[1]}-copy${seq}`
+  }
+  return `${value}-copy`
+}
+
+/** 复制按钮操作：以选中行为模板打开新增对话框，主键与审计字段不继承 */
+function handleCopy(row) {
+  reset()
+  const data = row || {}
+  form.value = {
+    id: null,
+    name: data.name,
+    no: buildCopyValue(data.no),
+    // 编码是对账匹配键：源编码为空时保持为空（保存后回退模型型号），非空时同样追加后缀防止重复匹配
+    productCode: buildCopyValue(data.productCode),
+    type: data.type,
+    source: data.source,
+    priceDetail: data.priceDetail,
+    status: data.status === null || data.status === undefined ? 1 : data.status,
+    description: data.description
+  }
+  copySource.value = [data.name, data.no].filter(item => item).join(" / ") || "该模型"
+  open.value = true
+  title.value = "复制CRM模型产品"
 }
 
 /** 提交按钮 */

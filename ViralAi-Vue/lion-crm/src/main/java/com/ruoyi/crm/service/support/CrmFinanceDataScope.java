@@ -84,13 +84,13 @@ public class CrmFinanceDataScope
      *
      * @return 渠道ID集合，无归属返回空集合
      */
-    public List<Long> ownedSupplierIds()
+    public List<Long> selectAllSupplierIds()
     {
         if (!hasLoginContext())
         {
             return Collections.emptyList();
         }
-        List<Long> ids = crmContractMapper.selectOwnedSupplierIds(SecurityUtils.getUsername());
+        List<Long> ids = crmContractMapper.selectAllSupplierIds();
         return ids == null ? Collections.emptyList() : ids;
     }
 
@@ -105,7 +105,7 @@ public class CrmFinanceDataScope
         {
             return null;
         }
-        List<Long> ids = ownedSupplierIds();
+        List<Long> ids = selectAllSupplierIds();
         if (ids.isEmpty())
         {
             return Collections.singletonList(UNREACHABLE_SUPPLIER_ID);

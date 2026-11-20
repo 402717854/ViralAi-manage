@@ -27,6 +27,10 @@ public class CrmSupplierDto extends BaseEntity
     @Excel(name = "供应商名称")
     private String name;
 
+    /** 渠道类型：1 自营，2 三方 */
+    @Excel(name = "渠道类型", readConverterExp = "1=自营,2=三方")
+    private Integer supplierType;
+
     /** 负责人 */
     @Excel(name = "负责人")
     private String ownerUser;

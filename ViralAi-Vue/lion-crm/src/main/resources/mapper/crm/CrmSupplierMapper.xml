@@ -7,6 +7,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <resultMap type="CrmSupplier" id="CrmSupplierResult">
         <result property="id"    column="id"    />
         <result property="name"    column="name"    />
+        <result property="supplierType"    column="supplier_type"    />
         <result property="ownerUser"    column="owner_user"    />
         <result property="status"    column="status"    />
         <result property="mobile"    column="mobile"    />
@@ -22,11 +23,11 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     </resultMap>
 
     <sql id="selectCrmSupplierVo">
-        select id, name, owner_user, status, mobile, email, detail_address, pay_type, remark, creator, create_time, updater, update_time, deleted from crm_supplier
+        select id, name, supplier_type, owner_user, status, mobile, email, detail_address, pay_type, remark, creator, create_time, updater, update_time, deleted from crm_supplier
     </sql>
 
     <select id="selectCrmSupplierList" parameterType="CrmSupplier" resultType="com.ruoyi.crm.dto.CrmSupplierDto">
-        select a.id, a.name, a.owner_user, a.status, a.mobile, a.email, a.detail_address, a.pay_type,
+        select a.id, a.name, a.supplier_type, a.owner_user, a.status, a.mobile, a.email, a.detail_address, a.pay_type,
         a.remark,
         e.user_name as creator,
         a.create_time, c.user_name as updater, a.update_time, a.deleted from crm_supplier a
@@ -35,6 +36,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <where>
             a.deleted = 0
             <if test="name != null  and name != ''"> and a.name like concat('%', #{name}, '%')</if>
+            <if test="supplierType != null "> and a.supplier_type = #{supplierType}</if>
             <if test="ownerUser != null  and ownerUser != ''"> and a.owner_user = #{ownerUser}</if>
             <if test="status != null "> and a.status = #{status}</if>
             <if test="mobile != null  and mobile != ''"> and a.mobile = #{mobile}</if>
@@ -55,6 +57,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         insert into crm_supplier
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="name != null">name,</if>
+            <if test="supplierType != null">supplier_type,</if>
             <if test="ownerUser != null">owner_user,</if>
             <if test="status != null">status,</if>
             <if test="mobile != null">mobile,</if>
@@ -70,6 +73,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
          </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="name != null">#{name},</if>
+            <if test="supplierType != null">#{supplierType},</if>
             <if test="ownerUser != null">#{ownerUser},</if>
             <if test="status != null">#{status},</if>
             <if test="mobile != null">#{mobile},</if>
@@ -89,6 +93,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         update crm_supplier
         <trim prefix="SET" suffixOverrides=",">
             <if test="name != null">name = #{name},</if>
+            <if test="supplierType != null">supplier_type = #{supplierType},</if>
             <if test="ownerUser != null">owner_user = #{ownerUser},</if>
             <if test="status != null">status = #{status},</if>
             <if test="mobile != null">mobile = #{mobile},</if>
@@ -118,5 +123,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <select id="selectAvailableSupplierOptions" resultType="com.ruoyi.crm.dto.CrmSupplierOptionDto">
         select id,name from crm_supplier where deleted=0 and status=1
+    </select>
+
+    <!--
+      渠道可售模型 = 启用渠道 × 渠道已上架模型（crm_supplier_project）
+      商机/合同明细的选择数据源：客户侧不再维护渠道，可用范围由渠道上架关系决定。
+      只返回启用且未删除的渠道、有效且未删除的模型。
+    -->
+    <select id="selectChannelProductOptions" resultType="com.ruoyi.crm.dto.CrmChannelProductDto">
+        <!-- 报价归属渠道(supplier_id)维度的可售模型。
+             同一渠道下同一模型可能来自多个上游供应商（project_supplier_id），
+             这里聚合为一条，折扣取区间并集，保证「渠道 + 模型」在下游唯一 -->
+        select agg.supplier_id as supplier_id, s.name as supplier_name,
+               p.id, p.name, p.no, p.product_code, p.type, p.source, p.price_detail,
+               p.status, p.description,
+               agg.min_cost_discount, agg.max_cost_discount, agg.min_sell_discount, agg.max_sell_discount
+        from (
+            select supplier_id, project_id,
+                   min(min_cost_discount) as min_cost_discount,
+                   max(max_cost_discount) as max_cost_discount,
+                   min(min_sell_discount) as min_sell_discount,
+                   max(max_sell_discount) as max_sell_discount
+              from crm_supplier_project
+             group by supplier_id, project_id
+        ) agg
+        inner join crm_supplier s on s.id = agg.supplier_id and s.deleted = 0 and s.status = 1
+        inner join crm_model_product p on agg.project_id = p.id
+        where p.deleted = 0 and p.status = 1
+        order by agg.supplier_id, p.id
     </select>
 </mapper>

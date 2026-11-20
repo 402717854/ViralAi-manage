@@ -56,14 +56,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where a.id = #{id}
     </select>
 
-    <!-- 客户已关联渠道下的账户选项：供商机/合同明细选择渠道账户，只返回非敏感字段 -->
-    <select id="selectAccountOptionsByCustomerId" resultType="com.ruoyi.crm.dto.CrmSupplierAccountDto">
+    <!-- 渠道账户选项：供商机/合同明细选择渠道账户，只返回非敏感字段 -->
+    <select id="selectChannelAccountOptions" resultType="com.ruoyi.crm.dto.CrmSupplierAccountDto">
         select a.id, a.account_name, a.api_key_no,
                a.supplier_id, s.name as supplier_name, a.status, a.type
         from crm_supplier_account a
-        inner join crm_customer_supplier cs on cs.supplier_id = a.supplier_id
-        left join crm_supplier s on a.supplier_id = s.id
-        where cs.customer_id = #{customerId}
+        inner join crm_supplier s on s.id = a.supplier_id and s.deleted = 0 and s.status = 1
         order by a.supplier_id, (a.status = 1) desc, a.id
     </select>
 
@@ -78,6 +76,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                a.pull_channel, a.pull_url, a.pull_user
         from crm_supplier_account a
         <where>
+            pull_type=1
             <if test="accountId != null">
                 and a.id = #{accountId}
             </if>

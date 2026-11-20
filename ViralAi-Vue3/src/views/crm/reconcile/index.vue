@@ -16,7 +16,7 @@
         <el-button type="primary" icon="Search" @click="loadBoard">查询</el-button>
       </el-col>
       <el-col :span="12">
-        <span class="board-tip">统计口径：按网关调用时间归属账期，金额只统计匹配成功的用量</span>
+        <span class="board-tip">统计口径：按网关调用时间归属账期，金额只统计匹配成功的用量；汇总明细以「客户 + 渠道」为统计基准</span>
       </el-col>
     </el-row>
 
@@ -31,54 +31,74 @@
     </el-row>
 
     <el-row :gutter="12" class="content-row">
-      <el-col :span="14">
+      <el-col :span="16">
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <span>渠道对账汇总</span>
-              <el-tag type="info" v-if="board.billCycle">账期 {{ board.billCycle }}</el-tag>
+              <span>客户 + 渠道对账汇总</span>
+              <el-tag type="info" v-if="board.billCycle">账期 {{ board.billCycle }} · 共 {{ statRows.length }} 组</el-tag>
             </div>
           </template>
-          <el-table :data="board.supplierStats || []" size="small" max-height="420">
-            <el-table-column label="渠道" prop="supplierName" min-width="140" show-overflow-tooltip />
-            <el-table-column label="调用数" prop="totalCalls" width="90" />
-            <el-table-column label="token" prop="totalTokens" width="110" />
-            <el-table-column label="应收" width="145" show-overflow-tooltip>
+          <el-table :data="pagedStats" size="small" max-height="420">
+            <el-table-column label="客户" prop="customerName" min-width="120" show-overflow-tooltip>
+              <template #default="scope">{{ scope.row.customerName || "-" }}</template>
+            </el-table-column>
+            <el-table-column label="渠道" prop="supplierName" min-width="120" show-overflow-tooltip>
+              <template #default="scope">{{ scope.row.supplierName || "-" }}</template>
+            </el-table-column>
+            <el-table-column label="调用数" prop="totalCalls" width="85" />
+            <el-table-column label="token" prop="totalTokens" width="105" />
+            <el-table-column label="应收" width="130" show-overflow-tooltip>
               <template #default="scope">{{ formatAmount(scope.row.totalSellAmount) }}</template>
             </el-table-column>
-            <el-table-column label="成本" width="145" show-overflow-tooltip>
+            <el-table-column label="成本" width="130" show-overflow-tooltip>
               <template #default="scope">{{ formatAmount(scope.row.totalCostAmount) }}</template>
             </el-table-column>
-            <el-table-column label="毛利" width="145" show-overflow-tooltip>
+            <el-table-column label="毛利" width="130" show-overflow-tooltip>
               <template #default="scope">{{ formatAmount(scope.row.totalGrossProfit) }}</template>
             </el-table-column>
-            <el-table-column label="毛利率" width="90">
+            <el-table-column label="毛利率" width="85">
               <template #default="scope">{{ formatRate(scope.row.profitRate) }}</template>
             </el-table-column>
-            <el-table-column label="异常占比" width="100">
+            <el-table-column label="异常占比" width="90">
               <template #default="scope">
                 <span :class="{ 'rate-warning': Number(scope.row.abnormalRate) > 0 }">
                   {{ formatRate(scope.row.abnormalRate) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="合同数" prop="contractCount" width="80" />
           </el-table>
+          <pagination
+            v-show="statRows.length > statPageSize"
+            :total="statRows.length"
+            v-model:page="statPage"
+            v-model:limit="statPageSize"
+            :auto-scroll="false"
+            layout="total, prev, pager, next"
+          />
         </el-card>
       </el-col>
-      <el-col :span="10">
+      <el-col :span="8">
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <span>合同消耗排行 TOP10</span>
+              <span>渠道成本排行 TOP10</span>
+              <el-tag type="warning" v-if="board.billCycle">按成本倒序</el-tag>
             </div>
           </template>
-          <el-table :data="board.contractRank || []" size="small" max-height="420">
-            <el-table-column label="合同编号" prop="contactNo" min-width="170" show-overflow-tooltip />
-            <el-table-column label="客户" prop="customerName" min-width="120" show-overflow-tooltip />
-            <el-table-column label="token" prop="totalTokens" width="110" />
-            <el-table-column label="毛利" width="110">
-              <template #default="scope">{{ formatAmount(scope.row.totalGrossProfit) }}</template>
+          <el-table :data="board.supplierCostRank || []" size="small" max-height="420">
+            <el-table-column label="排名" type="index" width="60" />
+            <el-table-column label="渠道" prop="supplierName" min-width="110" show-overflow-tooltip>
+              <template #default="scope">{{ scope.row.supplierName || "-" }}</template>
+            </el-table-column>
+            <el-table-column label="成本" width="130" show-overflow-tooltip>
+              <template #default="scope">{{ formatAmount(scope.row.totalCostAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="成本占比" width="90">
+              <template #default="scope">{{ formatRate(scope.row.costRate) }}</template>
+            </el-table-column>
+            <el-table-column label="毛利率" width="85">
+              <template #default="scope">{{ formatRate(scope.row.profitRate) }}</template>
             </el-table-column>
           </el-table>
         </el-card>
@@ -92,8 +112,17 @@ import { getUsageBoard } from "@/api/crm/usage"
 import { parseTime } from "@/utils/ruoyi"
 
 const loading = ref(false)
-const board = ref({ supplierStats: [], contractRank: [] })
+const board = ref({ customerSupplierStats: [], supplierCostRank: [] })
 const billCycle = ref(parseTime(new Date(), "{y}-{m}"))
+
+/** 汇总表前端分页：客户 × 渠道组合数可能上百行，后端一次返回全量供合计与翻页 */
+const statPage = ref(1)
+const statPageSize = ref(10)
+const statRows = computed(() => board.value.customerSupplierStats || [])
+const pagedStats = computed(() => {
+  const start = (statPage.value - 1) * statPageSize.value
+  return statRows.value.slice(start, start + statPageSize.value)
+})
 
 const cards = computed(() => {
   const b = board.value || {}
@@ -131,7 +160,9 @@ function formatRate(value) {
 function loadBoard() {
   loading.value = true
   getUsageBoard(billCycle.value).then(res => {
-    board.value = res.data || { supplierStats: [], contractRank: [] }
+    board.value = res.data || { customerSupplierStats: [], supplierCostRank: [] }
+    // 换账期后行数会变，回到第一页避免停留在空页
+    statPage.value = 1
   }).finally(() => {
     loading.value = false
   })

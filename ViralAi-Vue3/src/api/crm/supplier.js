@@ -17,6 +17,31 @@ export function getSupplierOptions() {
   })
 }
 
+// 查询渠道可售模型（启用渠道 × 渠道已上架模型），商机/合同明细的模型选择数据源
+export function getChannelProductOptions() {
+  return request({
+    url: '/crm/supplier/channel-product-options',
+    method: 'get'
+  })
+}
+
+// 查询渠道账户选项（不含 apiKey 与密码），商机/合同明细的渠道账户选择数据源
+export function getChannelAccountOptions() {
+  return request({
+    url: '/crm/supplier/channel-account-options',
+    method: 'get'
+  })
+}
+
+// 按模型ID查询报过价的渠道（含渠道名称与折扣区间），供应商报价明细级联所属渠道用
+export function getProjectChannels(projectId) {
+  return request({
+    url: '/crm/supplier/project-channels',
+    method: 'get',
+    params: { projectId }
+  })
+}
+
 // 查询CRM 供应商详细
 export function getSupplier(id) {
   return request({

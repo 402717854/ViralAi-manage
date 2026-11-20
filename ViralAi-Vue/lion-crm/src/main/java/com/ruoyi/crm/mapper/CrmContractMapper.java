@@ -102,10 +102,9 @@ public interface CrmContractMapper
     /**
      * 查询指定账号作为负责人的渠道ID集合（财务对账数据权限仍按渠道收敛）
      *
-     * @param ownerUser 登录账号
      * @return 渠道ID集合
      */
-    public List<Long> selectOwnedSupplierIds(String ownerUser);
+    public List<Long> selectAllSupplierIds();
 
     /**
      * 查询指定账号作为负责人的客户ID集合（合同数据权限按客户收敛）
